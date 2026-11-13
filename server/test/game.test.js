@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DECISIONS, SYNC_PROMPTS } from '../src/content.js';
 import { judge } from '../src/matching.js';
 import { Room } from '../src/room.js';
 
-test('judge: exact, typo, close and miss', () => {
+test('judge: English exact, typo, close and miss', () => {
   assert.equal(judge('Pizza', 'pizza!'), 'match');
   assert.equal(judge('the tacos', 'Taco'), 'match');
   assert.equal(judge('pizzza', 'pizza'), 'match');
@@ -13,57 +14,96 @@ test('judge: exact, typo, close and miss', () => {
   assert.equal(judge('', 'x'), 'miss');
 });
 
-function setupRoom() {
+test('judge: Arabic spelling variants', () => {
+  assert.equal(judge('البيتزا', 'بيتزا'), 'match'); // definite article
+  assert.equal(judge('قهوة', 'القهوه'), 'match'); // taa marbuta
+  assert.equal(judge('أسد', 'اسد'), 'match'); // hamza on alef
+  assert.equal(judge('مَدرسة', 'مدرسه'), 'match'); // diacritics
+  assert.equal(judge('٧', '7'), 'match'); // Eastern Arabic digits
+  assert.equal(judge('قطة', 'كلب'), 'miss');
+});
+
+test('content: every prompt and choice is bilingual', () => {
+  for (const p of SYNC_PROMPTS) assert.ok(p.text.en && p.text.ar, JSON.stringify(p));
+  for (const d of DECISIONS) {
+    assert.ok(d.text.en && d.text.ar);
+    assert.equal(d.choices.length, 4);
+    for (const c of d.choices) assert.ok(c.en && c.ar);
+  }
+});
+
+function setupRoom(tests = ['sync', 'telepathy', 'decision']) {
   const room = new Room('TEST');
   room.join('host-0001', 'Hana', 's0');
   room.join('play-0001', 'Ali', 's1');
   room.join('play-0002', 'Bea', 's2');
   room.autoPair('host-0001');
-  room.updateSettings('host-0001', { mode: 'mixed', rounds: 4 });
+  room.updateSettings('host-0001', { tests, rounds: 6 });
   return room;
 }
 
-test('full sync + telepathy round flow with host override', () => {
+test('full sync → telepathy → decision flow with host override', () => {
   const room = setupRoom();
   const [team] = room.fullTeams();
   const [a, b] = team.members;
   room.start('host-0001');
+  assert.deepEqual(room.plan, ['sync', 'telepathy', 'decision', 'sync', 'telepathy', 'decision']);
   assert.equal(room.state, 'question_active');
 
   room.submitSync(a, { answer: 'Basketball court', prediction: 'ramen' });
   assert.equal(room.state, 'question_active');
   room.submitSync(b, { answer: 'Ramen', prediction: 'Hoop court' });
   assert.equal(room.state, 'revealing');
-
-  // a predicted b correctly, b's prediction is "close" → 0 until host approves
-  assert.equal(room.roundResults()[team.id].points, 1);
+  assert.equal(room.roundResults()[team.id].points, 1); // "close" scores 0 until approved
   room.setVerdict('host-0001', `pred:${b}`, 'match');
   assert.equal(room.roundResults()[team.id].points, 2);
-
   room.next('host-0001');
   assert.equal(team.score, 2);
-  assert.equal(room.state, 'telepathy_active');
 
+  assert.equal(room.state, 'telepathy_active');
   room.pickTile(a, 4);
   room.pickTile(b, 4);
   room.lockTile(a);
   room.lockTile(b);
   assert.equal(room.state, 'revealing');
   assert.equal(room.roundResults()[team.id].points, 2);
-
-  // Partner answers stay hidden from each other during active rounds
   room.next('host-0001');
-  room.submitSync(a, { answer: 'x', prediction: 'y' });
+
+  assert.equal(room.state, 'decision_active');
+  assert.equal(room.toView(a).round.choices.length, 4);
+  room.submitDecision(a, { choice: 1, prediction: 1 });
+  // Partner can't see a's pick before the reveal
   assert.equal(room.toView(b).round.submissions, undefined);
   assert.equal(room.toView(b).round.mine, null);
+  assert.throws(() => room.submitDecision(b, { choice: 9, prediction: 0 }), /pick_both/);
+  room.submitDecision(b, { choice: 1, prediction: 2 });
+  assert.equal(room.state, 'revealing');
+  // a predicted b (1 = 1 ✓), b predicted a (2 ≠ 1 ✗), same choice ✓ → 2
+  assert.deepEqual(room.roundResults()[team.id], { points: 2, max: 3, predictionsCorrect: 1, same: true });
+  room.next('host-0001');
+  assert.equal(team.score, 6);
 
   room.endGame('host-0001');
   assert.equal(room.state, 'game_over');
   room.dispose();
 });
 
-test('non-host cannot control the game', () => {
+test('settings: tests must be a non-empty subset', () => {
+  const room = setupRoom(['decision']);
+  assert.deepEqual(room.settings.tests, ['decision']);
+  assert.throws(() => room.updateSettings('host-0001', { tests: [] }), /need_one_test/);
+  room.start('host-0001');
+  assert.equal(room.state, 'decision_active');
+  room.dispose();
+});
+
+test('non-host cannot control the game; pairs get element ids', () => {
   const room = setupRoom();
-  assert.throws(() => room.start('play-0001'), /Only the host/);
+  assert.throws(() => room.start('play-0001'), /host_only/);
+  const [team] = room.fullTeams();
+  assert.ok(Number.isInteger(team.element));
+  assert.equal(team.name, null);
+  room.renameTeam('play-0001', team.id, 'Bond Squad');
+  assert.equal(room.teams.get(team.id).name, 'Bond Squad');
   room.dispose();
 });

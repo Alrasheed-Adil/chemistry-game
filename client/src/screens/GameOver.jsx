@@ -1,179 +1,250 @@
 /**
- * `game_over`: winner reveal, chemistry %, and per-team round stats.
+ * `game_over` — the lab report.
+ * A certificate for the viewer's pair (or the top pair for spectators):
+ * compatibility index on the indicator strip, bond classification, per-test
+ * stats and a stamp. Below it, every pair's readings.
  */
 
-import { motion } from 'framer-motion';
-import { Avatar, Button, Confetti, Screen, cx } from '../components/ui.jsx';
+import { motion, useReducedMotion } from 'framer-motion';
+import { BondScale } from '../components/BondScale.jsx';
+import { Avatar, Bubbles, Button, ElementTile, Screen, cx, indicatorColor } from '../components/ui.jsx';
 import { useGame } from '../game.jsx';
+import { bondFor, elementOf, pairName, useLang } from '../i18n.jsx';
 
 function teamStats(history, teamId) {
-  const s = { points: 0, max: 0, predictions: 0, predictionTotal: 0, jinx: 0, tele: 0, teleTotal: 0 };
+  const s = { points: 0, max: 0, sync: [0, 0], jinx: 0, telepathy: [0, 0], decision: [0, 0] };
   for (const round of history) {
     const r = round.results?.[teamId];
     if (!r) continue;
     s.points += r.points;
     s.max += r.max;
     if (round.type === 'sync') {
-      s.predictions += r.predictionsCorrect;
-      s.predictionTotal += 2;
+      s.sync[0] += r.predictionsCorrect;
+      s.sync[1] += 2;
       s.jinx += r.jinx ? 1 : 0;
+    } else if (round.type === 'decision') {
+      s.decision[0] += r.predictionsCorrect;
+      s.decision[1] += 2;
     } else {
-      s.tele += r.match ? 1 : 0;
-      s.teleTotal += 1;
+      s.telepathy[0] += r.match ? 1 : 0;
+      s.telepathy[1] += 1;
     }
   }
-  s.chemistry = s.max ? Math.round((s.points / s.max) * 100) : 0;
+  s.pct = s.max ? Math.round((s.points / s.max) * 100) : 0;
+  s.bond = bondFor(s.pct);
   return s;
-}
-
-function chemistryLabel(pct) {
-  if (pct >= 85) return 'Soulmates 💞';
-  if (pct >= 65) return 'Totally in sync ⚡';
-  if (pct >= 45) return 'Good vibes ✨';
-  if (pct >= 25) return 'Getting there 🌱';
-  return 'Opposites attract? 🧲';
 }
 
 export default function GameOver() {
   const { view, playersById, isHost, myTeam, actions } = useGame();
+  const { t } = useLang();
   const ranked = view.teams
-    .filter((t) => view.history.some((h) => h.results?.[t.id]))
-    .map((t) => ({ team: t, stats: teamStats(view.history, t.id) }))
-    .sort((a, b) => b.team.score - a.team.score || b.stats.chemistry - a.stats.chemistry);
+    .filter((tm) => view.history.some((h) => h.results?.[tm.id]))
+    .map((team) => ({ team, stats: teamStats(view.history, team.id) }))
+    .sort((a, b) => b.team.score - a.team.score || b.stats.pct - a.stats.pct);
 
-  const top = ranked[0];
-  const tie = ranked.length > 1 && ranked[1].team.score === top.team.score;
-
-  if (!top) {
+  if (!ranked.length) {
     return (
-      <Screen className="py-16 text-center">
-        <h1 className="font-display text-5xl font-extrabold">Game over</h1>
-        <p className="mt-3 text-white/60">No rounds were completed.</p>
+      <Screen className="bench mx-auto max-w-xl p-8 text-center">
+        <h1 className="text-3xl font-semibold">{t('report.title')}</h1>
+        <p className="mt-3 text-ink-soft">{t('report.noRounds')}</p>
         {!isHost ? (
           <Button variant="secondary" className="mt-6" onClick={actions.leaveRoom}>
-            Leave room
+            {t('report.leave')}
           </Button>
         ) : null}
       </Screen>
     );
   }
 
+  const featured = ranked.find((r) => r.team.id === myTeam?.id) ?? ranked[0];
+  const host = playersById[view.hostId];
+
   return (
-    <Screen className="space-y-8">
-      <Confetti count={120} />
+    <Screen className="mx-auto max-w-4xl space-y-8">
+      {featured.stats.pct >= 65 ? <Bubbles count={30} color={indicatorColor(featured.stats.pct)} /> : null}
+      <Certificate entry={featured} hostName={host?.name} isMine={featured.team.id === myTeam?.id} />
 
-      {/* Winner hero */}
-      <div className="pt-4 text-center">
-        <motion.div
-          initial={{ scale: 0, rotate: -30 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 180, damping: 12 }}
-          className="text-7xl"
-        >
-          {tie ? '🤝' : '🏆'}
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="mt-3 font-display text-5xl leading-none font-extrabold tracking-tight sm:text-7xl"
-        >
-          {tie ? (
-            "It's a tie!"
-          ) : (
-            <>
-              <span className="text-gradient">{top.team.name}</span> win!
-            </>
-          )}
-        </motion.h1>
-        {!tie ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="mt-5 flex items-center justify-center gap-3"
-          >
-            {top.team.members.map((id) => (
-              <div key={id} className="flex flex-col items-center gap-1">
-                <Avatar player={playersById[id]} size="lg" ring={top.team.color} />
-                <span className="font-semibold">{playersById[id]?.name ?? 'Someone'}</span>
-              </div>
-            ))}
-          </motion.div>
-        ) : null}
-      </div>
-
-      {/* Standings */}
-      <div className="mx-auto grid max-w-4xl gap-3">
-        {ranked.map(({ team, stats }, i) => (
-          <motion.div
-            key={team.id}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 + i * 0.12 }}
-            className={cx(
-              'glass relative overflow-hidden rounded-3xl p-4 sm:p-5',
-              team.id === myTeam?.id && 'ring-2 ring-white/25',
-            )}
-          >
-            <div className="absolute -top-16 -left-10 size-44 rounded-full opacity-25 blur-3xl" style={{ background: team.color }} />
-            <div className="relative flex flex-wrap items-center gap-4">
-              <span className="w-8 font-display text-3xl font-extrabold text-white/30">{i + 1}</span>
-              <div className="flex -space-x-2">
-                {team.members.map((id) => (
-                  <Avatar key={id} player={playersById[id]} size="md" ring={team.color} />
-                ))}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-xl font-bold">{team.name}</div>
-                <div className="text-sm text-white/55">{chemistryLabel(stats.chemistry)}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-display text-3xl font-extrabold tabular-nums">{team.score}</div>
-                <div className="text-xs text-white/40">points</div>
-              </div>
-            </div>
-
-            {/* Chemistry meter */}
-            <div className="relative mt-4">
-              <div className="mb-1 flex justify-between text-xs font-bold text-white/50">
-                <span>Chemistry</span>
-                <span>{stats.chemistry}%</span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-white/8">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${stats.chemistry}%` }}
-                  transition={{ delay: 1 + i * 0.12, duration: 1.1, ease: [0.2, 0.7, 0.3, 1] }}
-                  className="h-full rounded-full bg-gradient-to-r from-coral-500 via-electric-500 to-indigo-400"
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                {stats.predictionTotal ? (
-                  <span className="chip">
-                    💬 {stats.predictions}/{stats.predictionTotal} predictions
-                  </span>
-                ) : null}
-                {stats.predictionTotal ? <span className="chip">⚡ {stats.jinx} jinx</span> : null}
-                {stats.teleTotal ? (
-                  <span className="chip">
-                    🔮 {stats.tele}/{stats.teleTotal} telepathy
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+      {ranked.length > 1 ? <Ranking ranked={ranked} /> : null}
 
       {!isHost ? (
         <div className="text-center">
-          <p className="mb-3 text-sm text-white/50">The host can start a rematch from the lobby.</p>
+          <p className="mb-3 text-sm text-graphite">{t('report.rematch')}</p>
           <Button variant="secondary" onClick={actions.leaveRoom}>
-            Leave room
+            {t('report.leave')}
           </Button>
         </div>
       ) : null}
     </Screen>
+  );
+}
+
+/* ----------------------------- Certificate ----------------------------- */
+
+function Certificate({ entry, hostName, isMine }) {
+  const { view, playersById } = useGame();
+  const { t, L, lang } = useLang();
+  const reduce = useReducedMotion();
+  const { team, stats } = entry;
+  const el = elementOf(team);
+  const names = team.members.map((id) => playersById[id]?.name ?? '…');
+  const date = new Intl.DateTimeFormat(lang === 'ar' ? 'ar-u-ca-gregory-nu-latn' : 'en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(view.endedAt ?? Date.now());
+  const color = indicatorColor(stats.pct);
+
+  const statLines = [
+    stats.sync[1] ? t('report.syncStat', { a: stats.sync[0], b: stats.sync[1] }) : null,
+    stats.sync[1] ? t('report.jinxStat', { n: stats.jinx }) : null,
+    stats.telepathy[1] ? t('report.telepathyStat', { a: stats.telepathy[0], b: stats.telepathy[1] }) : null,
+    stats.decision[1] ? t('report.decisionStat', { a: stats.decision[0], b: stats.decision[1] }) : null,
+  ].filter(Boolean);
+
+  return (
+    <motion.article
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+      className="relative overflow-hidden rounded-[20px] border border-line bg-bench p-2 shadow-[0_24px_60px_-30px_rgba(19,35,58,.45)]"
+    >
+      {/* inner rule: the certificate frame */}
+      <div className="relative rounded-[14px] border border-ink/15 px-5 py-6 sm:px-10 sm:py-9">
+        <header className="flex flex-wrap items-start justify-between gap-3 text-sm text-graphite">
+          <span>{t('app.lab')}</span>
+          <span className="text-end">
+            <span className="block" dir="auto">{t('report.session', { code: view.code })}</span>
+            <span className="block">{date}</span>
+          </span>
+        </header>
+
+        <h1 className="mt-6 text-[30px] leading-tight font-semibold tracking-[-0.02em] sm:text-[40px]">{t('report.cert')}</h1>
+
+        <div className="mt-6 flex items-center gap-4">
+          <ElementTile symbol={el.symbol} number={el.number} color={el.color} name={L(el.name)} size="lg" />
+          <div className="min-w-0">
+            <div className="text-2xl leading-tight font-semibold sm:text-3xl">
+              {/* <bdi> keeps Latin names in Arabic text (and vice versa) in the right order */}
+              <bdi>{names[0]}</bdi>
+              {lang === 'ar' ? ' و' : ' & '}
+              <bdi>{names[1]}</bdi>
+            </div>
+            <div className="mt-1 text-ink-soft">
+              {pairName(team, L)}
+              {isMine ? <span className="text-graphite"> · {t('report.yourPair')}</span> : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 border-t border-line-soft pt-6 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div>
+            <div className="text-sm text-graphite">{t('report.bond')}</div>
+            <div className="mt-1 text-[28px] leading-tight font-semibold" style={{ color }}>
+              {t(`bonds.${stats.bond}.name`)}
+            </div>
+            <p className="mt-1 max-w-[30rem] text-ink-soft">{t(`bonds.${stats.bond}.desc`)}</p>
+          </div>
+          <div className="sm:text-end">
+            <div className="text-sm text-graphite">{t('report.index')}</div>
+            <div dir="ltr" className="tabular text-[64px] leading-none font-semibold tracking-[-0.04em]" style={{ color }}>
+              {stats.pct}
+              <span className="text-[32px]">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <BondScale value={stats.pct} />
+        </div>
+
+        <ul className="mt-6 grid gap-x-6 gap-y-1 text-[15px] text-ink-soft sm:grid-cols-2">
+          {statLines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+          <li className="font-medium text-ink">{t('report.points', { n: team.score })}</li>
+        </ul>
+
+        <footer className="mt-10 flex items-end justify-between gap-6">
+          <div className="min-w-0">
+            <div className="h-px w-48 bg-ink/40" />
+            <div className="mt-2 text-sm text-graphite">{t('report.supervised', { name: hostName ?? '…' })}</div>
+          </div>
+          <Stamp label={t('report.certified')} color={color} />
+        </footer>
+      </div>
+    </motion.article>
+  );
+}
+
+/** The rubber stamp — the report's single orchestrated moment. */
+function Stamp({ label, color }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.div
+      aria-hidden
+      initial={reduce ? false : { scale: 2.2, opacity: 0, rotate: -30 }}
+      animate={{ scale: 1, opacity: 0.92, rotate: -12 }}
+      transition={{ delay: 1.6, type: 'spring', stiffness: 260, damping: 15 }}
+      className="grid size-28 shrink-0 place-items-center rounded-full border-[3px] text-center"
+      style={{ borderColor: color, color }}
+    >
+      <div className="grid size-[92px] place-items-center rounded-full border border-dashed" style={{ borderColor: color }}>
+        <span className="px-1 text-[17px] leading-none font-semibold">{label}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------- Ranking ------------------------------- */
+
+function Ranking({ ranked }) {
+  const { playersById, myTeam } = useGame();
+  const { t, L } = useLang();
+  return (
+    <section>
+      <h2 className="mb-3 text-lg font-semibold">{t('report.ranking')}</h2>
+      <ol className="bench divide-y divide-line-soft">
+        {ranked.map(({ team, stats }, i) => {
+          const el = elementOf(team);
+          const tie = i > 0 && ranked[i - 1].team.score === team.score;
+          return (
+            <li
+              key={team.id}
+              className={cx('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', team.id === myTeam?.id && 'bg-glass')}
+            >
+              <span className="tabular w-6 text-center text-graphite">{tie ? '=' : i + 1}</span>
+              <ElementTile symbol={el.symbol} number={el.number} color={el.color} size="sm" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{pairName(team, L)}</div>
+                <div className="flex items-center gap-1.5 text-sm text-graphite">
+                  <span className="flex -space-x-1.5 rtl:space-x-reverse">
+                    {team.members.map((id) => (
+                      <Avatar key={id} player={playersById[id]} size="xs" />
+                    ))}
+                  </span>
+                  <span className="truncate">{t(`bonds.${stats.bond}.name`)}</span>
+                </div>
+              </div>
+              <div className="w-28 sm:w-40">
+                <div className="h-2 overflow-hidden rounded-full bg-glass">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: indicatorColor(stats.pct) }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${stats.pct}%` }}
+                    transition={{ delay: 0.6 + i * 0.1, duration: 0.9 }}
+                  />
+                </div>
+                <div dir="ltr" className="tabular mt-1 text-end text-xs text-graphite">
+                  {stats.pct}%
+                </div>
+              </div>
+              <span className="tabular w-10 text-end text-xl font-semibold">{team.score}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }

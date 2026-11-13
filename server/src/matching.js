@@ -1,6 +1,9 @@
 /**
  * Fuzzy answer matching for Sync mode.
  *
+ * Works for English and Arabic (and mixed groups — though an Arabic answer
+ * vs. an English prediction will just fall to the host to judge).
+ *
  * judge(prediction, answer) returns:
  *   'match' — clearly the same answer (auto-awarded, host can still revoke)
  *   'close' — plausibly the same (e.g. "Basketball court" vs "Hoop court");
@@ -8,10 +11,41 @@
  *   'miss'  — different answers
  */
 
-const FILLER = new Set(['a', 'an', 'the', 'my', 'your', 'some', 'probably', 'definitely']);
-const STOP = new Set(['and', 'of', 'with', 'in', 'on', 'for', 'to', 'or', 'at', 'it', 'is']);
+const FILLER = new Set([
+  'a', 'an', 'the', 'my', 'your', 'some', 'probably', 'definitely',
+  'اكيد', 'يمكن', 'ربما', 'غالبا',
+]);
+const STOP = new Set([
+  'and', 'of', 'with', 'in', 'on', 'for', 'to', 'or', 'at', 'it', 'is',
+  'في', 'من', 'على', 'الى', 'او', 'مع', 'عن',
+]);
+
+const ARABIC_DIGITS = /[\u0660-\u0669\u06F0-\u06F9]/g;
+
+/**
+ * Arabic spelling normalisation: hamza/madda on alef (handled by NFKD + mark
+ * stripping), taa marbuta → haa, alef maqsura → yaa, waw/yaa hamza seats,
+ * tatweel, Eastern-Arabic digits, and the definite article "ال".
+ */
+function normalizeArabic(text) {
+  return text
+    .replace(ARABIC_DIGITS, (d) => String((d.charCodeAt(0) & 0xf) % 10))
+    .replace(/\u0640/g, '') // tatweel \u0640
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي');
+}
+
+function stripArabicArticle(word) {
+  if (word.length > 3 && /^(ال|وال|بال|فال|كال|لل)/.test(word)) {
+    return word.replace(/^(و|ب|ف|ك)?ال/, '').replace(/^لل/, '');
+  }
+  return word;
+}
 
 function singular(word) {
+  if (/[\u0600-\u06FF]/.test(word)) return stripArabicArticle(word);
   if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
   if (word.length > 4 && /(ch|sh|x|z|ss)es$/.test(word)) return word.slice(0, -2);
   if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
@@ -19,10 +53,10 @@ function singular(word) {
 }
 
 export function normalize(text) {
-  const raw = String(text ?? '').trim().toLowerCase();
+  const raw = normalizeArabic(String(text ?? '').trim().toLowerCase());
   const words = raw
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '') // strip accents
+    .replace(/[\u0300-\u036F\u064B-\u065F\u0670]/g, '') // strip accents + Arabic diacritics
     .replace(/&/g, ' and ')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ') // strip punctuation / emoji
     .split(/\s+/)

@@ -1,6 +1,7 @@
 /**
- * Game content: prompts, telepathy grids, team names, avatars.
- * Everything here is plain data so it's easy to extend — add prompts freely.
+ * Game content — every player-facing string is bilingual: { en, ar }.
+ * The client renders whichever language each player has chosen, so a mixed
+ * Arabic/English group sees the same prompt in their own language.
  */
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -14,84 +15,239 @@ export const shuffle = (arr) => {
   return a;
 };
 
-/* ------------------------------------------------------------------ */
-/* Sync / Questions mode                                               */
-/* Each player answers for themselves AND predicts their partner.      */
-/* ------------------------------------------------------------------ */
-
-export const SYNC_PROMPTS = [
-  // Know me — personal questions
-  { category: 'Know Me', text: "What's your ultimate comfort food?" },
-  { category: 'Know Me', text: "What's your go-to karaoke song?" },
-  { category: 'Know Me', text: 'Dream vacation destination?' },
-  { category: 'Know Me', text: "What's your most-used emoji?" },
-  { category: 'Know Me', text: 'Which celebrity would you want to have dinner with?' },
-  { category: 'Know Me', text: "First thing you'd buy if you won the lottery?" },
-  { category: 'Know Me', text: "What's your biggest pet peeve?" },
-  { category: 'Know Me', text: 'What would your autobiography be titled?' },
-  { category: 'Know Me', text: 'Perfect way to spend a lazy Sunday?' },
-  { category: 'Know Me', text: "What's your most irrational fear?" },
-  { category: 'Know Me', text: 'If you were an animal, which one would you be?' },
-  { category: 'Know Me', text: 'The perfect pizza topping?' },
-  { category: 'Know Me', text: 'A smell that instantly makes you happy?' },
-  { category: 'Know Me', text: 'Which decade would you time-travel to?' },
-  { category: 'Know Me', text: 'All-time favorite movie?' },
-  { category: 'Know Me', text: 'Which superpower would you pick?' },
-  { category: 'Know Me', text: "What's your coffee (or tea) order?" },
-  { category: 'Know Me', text: 'What would you name a pet goldfish?' },
-  { category: 'Know Me', text: 'Your most-played song this month?' },
-  { category: 'Know Me', text: 'The chore you hate the most?' },
-  { category: 'Know Me', text: "Dish you'd cook to impress someone?" },
-  { category: 'Know Me', text: 'Your favorite season?' },
-
-  // Same wavelength — word association, "name a…"
-  { category: 'Same Wavelength', text: "Name something you'd find in a messy garage" },
-  { category: 'Same Wavelength', text: "Name a fruit that's seriously underrated" },
-  { category: 'Same Wavelength', text: "Name something that's always sticky" },
-  { category: 'Same Wavelength', text: 'Name a famous cartoon character' },
-  { category: 'Same Wavelength', text: 'Name something people bring to the beach' },
-  { category: 'Same Wavelength', text: "Name something you'd find in a grandma's purse" },
-  { category: 'Same Wavelength', text: 'Name a classic excuse for being late' },
-  { category: 'Same Wavelength', text: 'Name something that comes in pairs' },
-  { category: 'Same Wavelength', text: 'Name a board game everyone knows' },
-  { category: 'Same Wavelength', text: 'Name a vegetable kids refuse to eat' },
-  { category: 'Same Wavelength', text: 'Name a famous landmark' },
-  { category: 'Same Wavelength', text: 'Name something that makes a loud noise' },
-  { category: 'Same Wavelength', text: 'Name an animal with a long neck… or tail' },
-  { category: 'Same Wavelength', text: 'Name a word that rhymes with "cat"' },
-
-  // Fill in the blank
-  { category: 'Fill the Blank', text: 'The best thing about rainy days is ___' },
-  { category: 'Fill the Blank', text: 'A perfect first date involves ___' },
-  { category: 'Fill the Blank', text: "If I could only eat one food forever, it'd be ___" },
-  { category: 'Fill the Blank', text: 'The most overrated holiday is ___' },
-  { category: 'Fill the Blank', text: 'Every kitchen needs a ___' },
-  { category: 'Fill the Blank', text: 'The world would be better with more ___' },
-  { category: 'Fill the Blank', text: "A road trip isn't complete without ___" },
-  { category: 'Fill the Blank', text: 'My villain origin story starts with ___' },
-  { category: 'Fill the Blank', text: 'The weirdest pizza topping that actually works: ___' },
-  { category: 'Fill the Blank', text: "Never trust someone who doesn't like ___" },
-];
-
-/** Picks an unused sync prompt (tracks indices in `used`, resets when exhausted). */
-export function drawSyncPrompt(used) {
-  if (used.size >= SYNC_PROMPTS.length) used.clear();
-  const available = SYNC_PROMPTS.map((_, i) => i).filter((i) => !used.has(i));
+/** Draw an unused index from `list`, tracking used ones in `used` (resets when exhausted). */
+function drawIndex(list, used) {
+  if (used.size >= list.length) used.clear();
+  const available = list.map((_, i) => i).filter((i) => !used.has(i));
   const index = pick(available);
   used.add(index);
-  return { ...SYNC_PROMPTS[index] };
+  return index;
 }
 
 /* ------------------------------------------------------------------ */
-/* Telepathy grid mode                                                 */
+/* Sync — answer for yourself, predict your partner                    */
+/* category keys are translated on the client: know | wave | blank     */
 /* ------------------------------------------------------------------ */
 
+const S = (category, en, ar) => ({ category, text: { en, ar } });
+
+export const SYNC_PROMPTS = [
+  S('know', "What's your ultimate comfort food?", 'ما الأكلة التي تريّحك مهما كان مزاجك؟'),
+  S('know', 'Your go-to song to sing out loud?', 'أغنيتك المفضّلة للغناء بصوت عالٍ؟'),
+  S('know', 'Dream vacation destination?', 'وجهة إجازة أحلامك؟'),
+  S('know', "What's your most-used emoji?", 'ما أكثر إيموجي تستخدمه؟'),
+  S('know', 'Which famous person would you want to have dinner with?', 'أي شخصية مشهورة تتمنى أن تتناول العشاء معها؟'),
+  S('know', "First thing you'd buy with a surprise million?", 'أول شيء ستشتريه لو حصلت على مليون فجأة؟'),
+  S('know', 'What annoys you the most?', 'ما أكثر شيء يستفزّك؟'),
+  S('know', 'What would your autobiography be called?', 'ما عنوان سيرتك الذاتية لو كتبتها؟'),
+  S('know', 'Your perfect day off?', 'يوم الإجازة المثالي بالنسبة لك؟'),
+  S('know', "What's your most irrational fear?", 'ما أغرب شيء تخاف منه؟'),
+  S('know', 'If you were an animal, which one would you be?', 'لو كنت حيوانًا، ماذا ستكون؟'),
+  S('know', 'Your favorite pizza topping?', 'إضافتك المفضّلة على البيتزا؟'),
+  S('know', 'A smell that instantly makes you happy?', 'رائحة تسعدك فورًا؟'),
+  S('know', 'All-time favorite movie?', 'فيلمك المفضّل على الإطلاق؟'),
+  S('know', 'Which superpower would you pick?', 'أي قوة خارقة ستختار؟'),
+  S('know', "What's your usual coffee or tea order?", 'طلبك المعتاد من القهوة أو الشاي؟'),
+  S('know', 'What would you name a pet goldfish?', 'ماذا ستسمّي سمكة زينة لو اقتنيتها؟'),
+  S('know', 'The chore you hate the most?', 'أكثر عمل منزلي تكرهه؟'),
+  S('know', "A dish you'd cook to impress someone?", 'طبق تطبخه لتُبهر أحدًا؟'),
+  S('know', 'Your favorite season?', 'فصلك المفضّل؟'),
+  S('know', 'Your dream job as a kid?', 'وظيفة أحلامك وأنت صغير؟'),
+  S('know', 'The first app you open in the morning?', 'أول تطبيق تفتحه في الصباح؟'),
+
+  S('wave', "Name something you'd find in a messy storage room", 'شيء تجده في مخزن فوضوي'),
+  S('wave', "Name a fruit that's seriously underrated", 'فاكهة لا تأخذ حقها'),
+  S('wave', "Name something that's always sticky", 'شيء دائمًا لزج'),
+  S('wave', 'Name a famous cartoon character', 'شخصية كرتونية مشهورة'),
+  S('wave', 'Name something people bring to the beach', 'شيء يأخذه الناس معهم إلى البحر'),
+  S('wave', "Name something you'd find in a grandma's bag", 'شيء تجده في حقيبة الجدّة'),
+  S('wave', 'Name a classic excuse for being late', 'عذر كلاسيكي للتأخير'),
+  S('wave', 'Name something that comes in pairs', 'شيء يأتي على شكل زوج'),
+  S('wave', 'Name a board game everyone knows', 'لعبة لوحية يعرفها الجميع'),
+  S('wave', 'Name a vegetable kids refuse to eat', 'خضار يرفض الأطفال أكله'),
+  S('wave', 'Name a famous landmark', 'معلم سياحي شهير'),
+  S('wave', 'Name something that makes a loud noise', 'شيء يصدر صوتًا عاليًا'),
+  S('wave', "Name something you'd find in the desert", 'شيء تجده في الصحراء'),
+  S('wave', 'Name a sport you can play indoors', 'رياضة تُلعب في مكان مغلق'),
+  S('wave', 'Name something yellow', 'شيء لونه أصفر'),
+
+  S('blank', 'The best thing about rainy days is ___', 'أجمل شيء في الأيام الممطرة هو ___'),
+  S('blank', "A perfect evening out isn't complete without ___", 'السهرة المثالية لا تكتمل بدون ___'),
+  S('blank', "If I could eat only one food forever, it'd be ___", 'لو أكلت أكلة واحدة طوال حياتي، ستكون ___'),
+  S('blank', 'The most overrated trend is ___', 'أكثر ترند مُبالغ فيه هو ___'),
+  S('blank', 'Every kitchen needs a ___', 'كل مطبخ يحتاج إلى ___'),
+  S('blank', 'The world would be better with more ___', 'سيصبح العالم أجمل لو فيه المزيد من ___'),
+  S('blank', "A road trip isn't complete without ___", 'رحلة السيارة لا تكتمل بدون ___'),
+  S('blank', 'My villain origin story starts with ___', 'قصة تحوّلي إلى شرير تبدأ بـ ___'),
+  S('blank', "Never trust someone who doesn't like ___", 'لا تثق بشخص لا يحب ___'),
+  S('blank', 'The best time of day is ___', 'أفضل وقت في اليوم هو ___'),
+];
+
+export function drawSyncPrompt(used) {
+  return structuredClone(SYNC_PROMPTS[drawIndex(SYNC_PROMPTS, used)]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Decision — a situation with four options                            */
+/* ------------------------------------------------------------------ */
+
+const D = (en, ar, choices) => ({
+  category: 'decide',
+  text: { en, ar },
+  choices: choices.map(([cen, car]) => ({ en: cen, ar: car })),
+});
+
+export const DECISIONS = [
+  D('You find a wallet full of cash with no ID inside.', 'وجدت محفظة مليئة بالنقود بدون أي إثبات هوية.', [
+    ['Hand it to the police', 'أسلّمها للشرطة'],
+    ['Post about it online to find the owner', 'أنشر عنها في الإنترنت لأجد صاحبها'],
+    ['Ask people nearby if it’s theirs', 'أسأل من حولي إن كانت لهم'],
+    ['Leave it exactly where it was', 'أتركها في مكانها'],
+  ]),
+  D('Your flight is cancelled and the next one leaves in 12 hours.', 'أُلغيت رحلتك والرحلة التالية بعد 12 ساعة.', [
+    ['Book a hotel and sleep', 'أحجز فندقًا وأنام'],
+    ['Go explore the city', 'أخرج لأستكشف المدينة'],
+    ['Camp at the gate with snacks', 'أبقى عند البوابة مع وجبات خفيفة'],
+    ['Argue until they find another option', 'أجادل حتى يجدوا حلًا آخر'],
+  ]),
+  D('A friend cooks dinner for you and it’s honestly bad.', 'صديقك طبخ لك العشاء والأكل بصراحة سيئ.', [
+    ['Eat all of it and praise it', 'آكله كله وأمدحه'],
+    ['Eat a little and say I’m full', 'آكل قليلًا وأقول إنني شبعت'],
+    ['Tell them kindly', 'أخبره بلطف'],
+    ['Suggest ordering food “for a change”', 'أقترح أن نطلب أكلًا "للتغيير"'],
+  ]),
+  D('You get a completely free day with zero plans.', 'عندك يوم فارغ تمامًا بلا أي خطط.', [
+    ['Sleep and binge a series', 'نوم ومسلسلات'],
+    ['Go somewhere new', 'أذهب إلى مكان جديد'],
+    ['Finally finish my to-do list', 'أنجز المهام المؤجلة أخيرًا'],
+    ['Call friends and make plans', 'أتصل بالأصدقاء ونخطط لشيء'],
+  ]),
+  D('Someone takes the parking spot you were waiting for.', 'شخص أخذ الموقف الذي كنت تنتظره.', [
+    ['Let it go', 'أتجاهل الأمر'],
+    ['Honk', 'أضغط على البوق'],
+    ['Go talk to them', 'أذهب وأكلّمه'],
+    ['Leave a note on their car', 'أترك ورقة على سيارته'],
+  ]),
+  D('Your phone dies and you’re lost in a new city.', 'جوالك انطفأ وأنت تائه في مدينة جديدة.', [
+    ['Ask a stranger for directions', 'أسأل شخصًا غريبًا عن الطريق'],
+    ['Find a café and charge it', 'أبحث عن مقهى لأشحن الجوال'],
+    ['Wander and trust my instincts', 'أتجوّل وأثق بحدسي'],
+    ['Take a taxi back to the hotel', 'آخذ سيارة أجرة إلى الفندق'],
+  ]),
+  D('You can keep only one app on your phone.', 'مسموح لك بتطبيق واحد فقط على جوالك.', [
+    ['Messaging', 'المراسلة'],
+    ['Maps', 'الخرائط'],
+    ['Camera', 'الكاميرا'],
+    ['Social media', 'التواصل الاجتماعي'],
+  ]),
+  D('You’re invited to two events on the same night.', 'دُعيت إلى مناسبتين في نفس الليلة.', [
+    ['Pick the one with my closest friends', 'أختار التي فيها أقرب أصدقائي'],
+    ['Try to make it to both', 'أحاول حضور الاثنتين'],
+    ['Pick the one with better food', 'أختار التي أكلها أفضل'],
+    ['Stay home', 'أبقى في البيت'],
+  ]),
+  D('A spider shows up in your room at midnight.', 'ظهر عنكبوت في غرفتك منتصف الليل.', [
+    ['Deal with it myself', 'أتعامل معه بنفسي'],
+    ['Call someone for help', 'أطلب المساعدة من أحد'],
+    ['Leave the room for the night', 'أغادر الغرفة الليلة'],
+    ['Pretend I didn’t see it', 'أتظاهر أنني لم أره'],
+  ]),
+  D('You get a surprise bonus at work.', 'حصلت على مكافأة مفاجئة في العمل.', [
+    ['Save all of it', 'أدّخرها كلها'],
+    ['Book a trip', 'أحجز رحلة'],
+    ['Treat family and friends', 'أفاجئ عائلتي وأصدقائي'],
+    ['Buy something I’ve wanted for ages', 'أشتري شيئًا أريده منذ زمن'],
+  ]),
+  D('Nobody in your group project is doing anything.', 'لا أحد في مشروع المجموعة يعمل شيئًا.', [
+    ['Take charge and assign tasks', 'أتولّى القيادة وأوزّع المهام'],
+    ['Do everything myself', 'أنجز كل شيء بنفسي'],
+    ['Wait for someone else to start', 'أنتظر أن يبدأ أحد غيري'],
+    ['Tell the teacher or manager', 'أخبر المعلم أو المدير'],
+  ]),
+  D('You send a message to the wrong group chat.', 'أرسلت رسالة إلى المجموعة الخطأ.', [
+    ['Delete it fast and hope', 'أحذفها بسرعة وأتمنى ألا يراها أحد'],
+    ['Own it with a joke', 'أعترف بها بنكتة'],
+    ['Leave the group', 'أخرج من المجموعة'],
+    ['Act like I meant it', 'أتصرف وكأنني قصدتها'],
+  ]),
+  D('At an open buffet, your first plate is…', 'في البوفيه المفتوح، صحنك الأول هو…', [
+    ['A bit of everything', 'قليل من كل شيء'],
+    ['Straight to dessert', 'مباشرة إلى الحلويات'],
+    ['My usual favorite', 'المفضّل نفسه كل مرة'],
+    ['A healthy salad first', 'سلطة صحية أولًا'],
+  ]),
+  D('Someone spoils the ending of a show you’re watching.', 'شخص حرق لك نهاية مسلسل تتابعه.', [
+    ['Laugh it off', 'أضحك وأتجاوز'],
+    ['Never forgive them', 'لن أسامحه أبدًا'],
+    ['Stop watching', 'أتوقف عن المشاهدة'],
+    ['Keep watching to see how it happens', 'أكمل لأرى كيف حدث ذلك'],
+  ]),
+  D('You can master one skill instantly.', 'يمكنك إتقان مهارة واحدة فورًا.', [
+    ['A new language', 'لغة جديدة'],
+    ['Cooking', 'الطبخ'],
+    ['Drawing', 'الرسم'],
+    ['Coding', 'البرمجة'],
+  ]),
+  D('A friend asks you to keep a big secret.', 'صديقك طلب منك أن تحفظ سرًا كبيرًا.', [
+    ['Keep it forever', 'أحفظه للأبد'],
+    ['Tell only my closest person', 'أخبر أقرب شخص لي فقط'],
+    ['Ask them not to tell me', 'أطلب منه ألا يخبرني'],
+    ['I’ll probably forget it anyway', 'غالبًا سأنساه على أي حال'],
+  ]),
+  D('It’s 2am and you’re hungry.', 'الساعة الثانية فجرًا وأنت جائع.', [
+    ['Order delivery', 'أطلب توصيل'],
+    ['Cook something', 'أطبخ شيئًا'],
+    ['Eat whatever is in the fridge', 'آكل أي شيء في الثلاجة'],
+    ['Go back to sleep', 'أعود للنوم'],
+  ]),
+  D('You win a free trip, but you have to leave tomorrow.', 'ربحت رحلة مجانية، لكن يجب أن تسافر غدًا.', [
+    ['Pack and go', 'أجهّز حقيبتي وأسافر'],
+    ['Ask to change the date', 'أطلب تغيير الموعد'],
+    ['Give it to someone else', 'أعطيها لشخص آخر'],
+    ['Overthink until it’s too late', 'أفكر كثيرًا حتى يفوت الأوان'],
+  ]),
+  D('A stranger compliments your outfit.', 'شخص غريب أعجبه لبسك.', [
+    ['Say thanks and smile', 'أشكره وأبتسم'],
+    ['Get awkward', 'أرتبك'],
+    ['Compliment them back', 'أرد له المجاملة'],
+    ['Tell them where I bought it', 'أخبره من أين اشتريته'],
+  ]),
+  D('Your team is losing badly in a game with friends.', 'فريقك يخسر بشدة في لعبة مع الأصدقاء.', [
+    ['Play harder', 'ألعب بجدية أكبر'],
+    ['Joke about it', 'أمزح حول الأمر'],
+    ['Blame the rules', 'ألوم القوانين'],
+    ['Suggest a different game', 'أقترح لعبة أخرى'],
+  ]),
+  D('Your alarm didn’t go off and you’re already late.', 'المنبّه لم يرن وأنت متأخر أصلًا.', [
+    ['Rush out in five minutes', 'أخرج مسرعًا خلال خمس دقائق'],
+    ['Call and explain honestly', 'أتصل وأشرح بصراحة'],
+    ['Take my time — late is late', 'آخذ وقتي، التأخير تأخير'],
+    ['Call in sick', 'أعتذر بأنني مريض'],
+  ]),
+  D('You have to give a speech with no preparation.', 'عليك أن تلقي كلمة بدون أي تحضير.', [
+    ['Wing it confidently', 'أرتجل بثقة'],
+    ['Keep it very short', 'أجعلها قصيرة جدًا'],
+    ['Open with a joke', 'أبدأ بنكتة'],
+    ['Find a way out of it', 'أبحث عن طريقة للتهرب'],
+  ]),
+];
+
+export function drawDecision(used) {
+  return structuredClone(DECISIONS[drawIndex(DECISIONS, used)]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Telepathy — 3×3 well plate                                          */
+/* ------------------------------------------------------------------ */
+
+const T = (en, ar) => ({ en, ar });
+
 const GENERIC_TELEPATHY_PROMPTS = [
-  'Pick the one your partner will pick',
-  'Pick the first one that catches your eye',
-  'Pick the odd one out',
-  'Pick your favorite',
-  'Pick the one that best represents your team',
+  T('Pick the one your partner will pick', 'اختر ما سيختاره شريكك'),
+  T('Pick the first one that catches your eye', 'اختر أول ما يلفت نظرك'),
+  T('Pick the odd one out', 'اختر الشيء المختلف عن البقية'),
+  T('Pick your favorite', 'اختر المفضّل لديك'),
+  T('Pick the one that best represents your pair', 'اختر ما يمثّلكما أكثر'),
 ];
 
 const emojiSet = (name, items, prompts) => ({
@@ -103,75 +259,102 @@ const emojiSet = (name, items, prompts) => ({
 
 const TELEPATHY_SETS = [
   emojiSet(
-    'Snack Attack',
+    T('Late-night snacks', 'وجبات خفيفة'),
     ['🍕', '🍣', '🌮', '🍔', '🍩', '🍜', '🥐', '🍓', '🧀', '🍫', '🥑', '🍿', '🍪', '🥨', '🍉', '🌯'],
-    ["Pick the snack you'd split at 2am", 'Pick what your partner is craving right now'],
+    [
+      T("Pick the snack you'd share at 2am", 'اختر الوجبة التي ستتشاركانها في الثانية فجرًا'),
+      T('Pick what your partner is craving right now', 'اختر ما يشتهيه شريكك الآن'),
+    ],
   ),
   emojiSet(
-    'Wild Kingdom',
-    ['🦊', '🐼', '🐙', '🦄', '🐢', '🦁', '🐧', '🦥', '🐝', '🦩', '🐳', '🦔', '🐸', '🦉', '🐨', '🦖'],
-    ['Pick your spirit animal as a duo', 'Pick the animal your partner would adopt'],
+    T('Wild kingdom', 'مملكة الحيوان'),
+    ['🦊', '🐼', '🐙', '🦄', '🐢', '🦁', '🐧', '🦥', '🐝', '🦩', '🐳', '🦔', '🐸', '🦉', '🐨', '🐪'],
+    [
+      T('Pick your spirit animal as a pair', 'اختر الحيوان الذي يمثّلكما معًا'),
+      T('Pick the animal your partner would adopt', 'اختر الحيوان الذي سيتبنّاه شريكك'),
+    ],
   ),
   emojiSet(
-    'Wanderlust',
-    ['🏝️', '🏔️', '🏙️', '🏜️', '🏕️', '🗼', '🏰', '🌋', '🎡', '⛩️', '🗽', '🛶', '🚂', '🛸', '🎢', '🌌'],
-    ['Pick your next trip together', 'Pick where you would hide from the world'],
+    T('Wanderlust', 'شغف السفر'),
+    ['🏝️', '🏔️', '🏙️', '🏜️', '🏕️', '🗼', '🏰', '🌋', '🎡', '🛶', '🚂', '🛸', '🎢', '🌌', '🗻', '🏞️'],
+    [
+      T('Pick your next trip together', 'اختر رحلتكما القادمة'),
+      T("Pick where you'd hide from the world", 'اختر مكانًا تختبئان فيه من العالم'),
+    ],
   ),
   emojiSet(
-    'Vibe Check',
+    T('Mood check', 'فحص المزاج'),
     ['🌈', '⚡', '❄️', '🔥', '🌙', '☀️', '🌊', '🌪️', '🍂', '🌸', '⭐', '☁️', '🌵', '🍄', '🫧', '💎'],
-    ["Pick today's mood", 'Pick the vibe of your friendship'],
+    [
+      T("Pick today's mood", 'اختر مزاج اليوم'),
+      T('Pick the energy of your friendship', 'اختر طاقة علاقتكما'),
+    ],
   ),
   emojiSet(
-    'Pocket Stuff',
+    T('Belongings', 'أغراض'),
     ['🎸', '📚', '🎮', '🧸', '☕', '🎧', '📷', '🕯️', '🪴', '🎲', '🧩', '🛹', '🔭', '🎨', '🪁', '🧶'],
-    ['Pick the gift your partner would love', 'Pick what you would save from a fire'],
+    [
+      T('Pick the gift your partner would love', 'اختر الهدية التي ستعجب شريكك'),
+      T("Pick what you'd save from a fire", 'اختر ما ستنقذه من حريق'),
+    ],
   ),
   emojiSet(
-    'Face Off',
+    T('Faces', 'وجوه'),
     ['😂', '😍', '😎', '🤔', '😴', '🥳', '😱', '🤯', '😇', '🤠', '😈', '🥺', '🙃', '🤓', '😤', '🫠'],
-    ['Pick your partner on a Monday morning', 'Pick your face right now'],
+    [
+      T('Pick your partner on the first morning of the work week', 'اختر شكل شريكك في أول صباح من أسبوع العمل'),
+      T('Pick your face right now', 'اختر وجهك الآن'),
+    ],
   ),
   {
-    name: 'Palette',
+    name: T('Palette', 'ألوان'),
     kind: 'color',
-    prompts: ['Pick the color of your relationship', "Pick the color that matches today's mood"],
+    prompts: [
+      T('Pick the color of your relationship', 'اختر لون علاقتكما'),
+      T("Pick the color of today's mood", 'اختر لون مزاج اليوم'),
+    ],
     make: () =>
       shuffle([
-        { label: 'Coral', color: '#ff6b5b' },
-        { label: 'Sunflower', color: '#ffcc33' },
-        { label: 'Mint', color: '#4ade80' },
-        { label: 'Ocean', color: '#38bdf8' },
-        { label: 'Indigo', color: '#6366f1' },
-        { label: 'Grape', color: '#a855f7' },
-        { label: 'Bubblegum', color: '#f472b6' },
-        { label: 'Tangerine', color: '#fb923c' },
-        { label: 'Teal', color: '#14b8a6' },
-        { label: 'Ruby', color: '#e11d48' },
-        { label: 'Lime', color: '#a3e635' },
-        { label: 'Snow', color: '#f1f5f9' },
-        { label: 'Midnight', color: '#1e293b' },
-        { label: 'Lavender', color: '#c4b5fd' },
+        { label: T('Coral', 'مرجاني'), color: '#ff6b5b' },
+        { label: T('Sunflower', 'عبّاد الشمس'), color: '#ffcc33' },
+        { label: T('Mint', 'نعناعي'), color: '#4ade80' },
+        { label: T('Ocean', 'محيطي'), color: '#38bdf8' },
+        { label: T('Indigo', 'نيلي'), color: '#4f46e5' },
+        { label: T('Grape', 'عنبي'), color: '#9333ea' },
+        { label: T('Bubblegum', 'وردي'), color: '#f472b6' },
+        { label: T('Tangerine', 'يوسفي'), color: '#fb923c' },
+        { label: T('Teal', 'فيروزي'), color: '#14b8a6' },
+        { label: T('Ruby', 'ياقوتي'), color: '#e11d48' },
+        { label: T('Lime', 'ليموني'), color: '#a3e635' },
+        { label: T('Snow', 'ثلجي'), color: '#f1f5f9' },
+        { label: T('Midnight', 'كحلي'), color: '#1e293b' },
+        { label: T('Lavender', 'خزامى'), color: '#c4b5fd' },
       ])
         .slice(0, 9)
         .map((c) => ({ display: '', ...c })),
   },
   {
-    name: 'Shapeshifter',
+    name: T('Shapes', 'أشكال'),
     kind: 'shape',
-    prompts: ['Pick the shape that feels the most "you"', 'Pick the shape your partner would doodle'],
+    prompts: [
+      T('Pick the shape that feels most like you', 'اختر الشكل الأقرب لشخصيتك'),
+      T('Pick the shape your partner would doodle', 'اختر الشكل الذي سيرسمه شريكك'),
+    ],
     make: () => {
       const glyphs = ['●', '▲', '■', '◆', '★', '⬟', '♥', '✚', '⬢', '☾', '✦', '◐'];
-      const colors = ['#ff6b5b', '#818cf8', '#c084fc', '#38bdf8', '#fbbf24', '#f472b6', '#34d399'];
+      const colors = ['#e5383b', '#f48c06', '#e0a100', '#2e9e5b', '#1e88c9', '#5e4ae3', '#13233a'];
       return shuffle(glyphs)
         .slice(0, 9)
         .map((g) => ({ display: g, color: pick(colors) }));
     },
   },
   {
-    name: 'Lucky Numbers',
+    name: T('Lucky numbers', 'أرقام الحظ'),
     kind: 'number',
-    prompts: ['Pick the luckiest number', 'Pick the number your partner would bet on'],
+    prompts: [
+      T('Pick the luckiest number', 'اختر الرقم الأكثر حظًا'),
+      T('Pick the number your partner would choose', 'اختر الرقم الذي سيختاره شريكك'),
+    ],
     make: () => {
       const nums = new Set();
       while (nums.size < 9) nums.add(1 + Math.floor(Math.random() * 99));
@@ -179,13 +362,18 @@ const TELEPATHY_SETS = [
     },
   },
   {
-    name: 'Word Play',
+    name: T('Words', 'كلمات'),
     kind: 'word',
-    prompts: ['Pick the coziest-sounding word', 'Pick the word that sounds like your partner'],
+    prompts: [
+      T('Pick the coziest-sounding word', 'اختر الكلمة الأكثر دفئًا'),
+      T('Pick the word that sounds like your partner', 'اختر الكلمة التي تشبه شريكك'),
+    ],
     make: () =>
       shuffle([
-        'Ocean', 'Thunder', 'Velvet', 'Cactus', 'Lantern', 'Marble', 'Honey', 'Comet',
-        'Whisper', 'Maple', 'Echo', 'Ember', 'Pickle', 'Galaxy', 'Pebble', 'Waffle',
+        T('Ocean', 'محيط'), T('Thunder', 'رعد'), T('Velvet', 'مخمل'), T('Cactus', 'صبّار'),
+        T('Lantern', 'فانوس'), T('Marble', 'رخام'), T('Honey', 'عسل'), T('Comet', 'مذنّب'),
+        T('Whisper', 'همس'), T('Palm tree', 'نخلة'), T('Echo', 'صدى'), T('Ember', 'جمر'),
+        T('Pickle', 'مخلّل'), T('Galaxy', 'مجرّة'), T('Pebble', 'حصاة'), T('Dune', 'كثيب'),
       ])
         .slice(0, 9)
         .map((w) => ({ display: w })),
@@ -194,40 +382,22 @@ const TELEPATHY_SETS = [
 
 /** Builds a fresh 3×3 telepathy grid, avoiding recently-used sets. */
 export function buildTelepathyGrid(used) {
-  if (used.size >= TELEPATHY_SETS.length) used.clear();
-  const available = TELEPATHY_SETS.map((_, i) => i).filter((i) => !used.has(i));
-  const index = pick(available);
-  used.add(index);
-  const set = TELEPATHY_SETS[index];
-  const prompt = Math.random() < 0.65 ? pick(set.prompts) : pick(GENERIC_TELEPATHY_PROMPTS);
+  const set = TELEPATHY_SETS[drawIndex(TELEPATHY_SETS, used)];
+  const text = Math.random() < 0.65 ? pick(set.prompts) : pick(GENERIC_TELEPATHY_PROMPTS);
   return {
-    prompt: { category: set.name, text: prompt },
+    prompt: { category: 'telepathy', setName: set.name, text },
     grid: { kind: set.kind, cols: 3, items: set.make() },
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* Lobby flavor                                                        */
+/* Lobby                                                               */
 /* ------------------------------------------------------------------ */
 
-export const TEAM_NAMES = [
-  'Cosmic Pickles', 'Velvet Thunder', 'Mind Melders', 'Spicy Noodles', 'Night Owls',
-  'Twin Flames', 'Lucky Ducks', 'Brain Waves', 'Sugar Rush', 'Moon Walkers',
-  'Wild Cards', 'Pocket Rockets', 'Dream Team', 'Lava Lamps', 'Neon Ninjas', 'Disco Dumplings',
-];
-
-export const TEAM_COLORS = [
-  '#ff6b5b', // coral
-  '#818cf8', // indigo
-  '#c084fc', // electric purple
-  '#2dd4bf', // teal
-  '#fbbf24', // amber
-  '#f472b6', // pink
-  '#38bdf8', // sky
-  '#a3e635', // lime
-];
+/** Pairs are identified by an element (rendered client-side with name, symbol, flame color). */
+export const ELEMENT_COUNT = 12;
 
 export const AVATARS = [
   '🦊', '🐼', '🐙', '🦄', '🐢', '🦁', '🐧', '🦥', '🐝', '🦩', '🐳', '🦔',
-  '🐸', '🦉', '🐨', '🦖', '🐯', '🐰', '🦋', '🐶', '🐱', '🐻', '🦦', '🐲',
+  '🐸', '🦉', '🐨', '🐪', '🐯', '🐰', '🦋', '🐶', '🐱', '🐻', '🦦', '🐲',
 ];

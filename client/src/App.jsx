@@ -5,14 +5,17 @@
  *   waiting          → Lobby
  *   question_active  → SyncQuestion
  *   telepathy_active → TelepathyActive
- *   revealing        → SyncReveal | TelepathyReveal (by round type)
+ *   decision_active  → DecisionActive
+ *   revealing        → SyncReveal | TelepathyReveal | DecisionReveal (by round type)
  *   game_over        → GameOver
  */
 
 import { AnimatePresence } from 'framer-motion';
+import { useEffect } from 'react';
 import { Header, HostBar, Scoreboard } from './components/shell.jsx';
-import { Backdrop, Toasts, cx } from './components/ui.jsx';
+import { Toasts, cx } from './components/ui.jsx';
 import { FrozenWhenExiting, useGame } from './game.jsx';
+import { DecisionActive, DecisionReveal } from './screens/Decision.jsx';
 import GameOver from './screens/GameOver.jsx';
 import Landing from './screens/Landing.jsx';
 import Lobby from './screens/Lobby.jsx';
@@ -23,6 +26,10 @@ import { TelepathyActive, TelepathyReveal } from './screens/Telepathy.jsx';
 function CurrentScreen() {
   const { view } = useGame();
   const key = `${view.state}-${view.round?.number ?? 0}-${view.round?.deadline ?? 0}`;
+  // Every new screen (next round, reveal, report) starts at the top of the page.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [key]);
   let screen;
   switch (view.state) {
     case 'waiting':
@@ -34,8 +41,11 @@ function CurrentScreen() {
     case 'telepathy_active':
       screen = <TelepathyActive />;
       break;
+    case 'decision_active':
+      screen = <DecisionActive />;
+      break;
     case 'revealing':
-      screen = view.round?.type === 'sync' ? <SyncReveal /> : <TelepathyReveal />;
+      screen = { sync: <SyncReveal />, telepathy: <TelepathyReveal />, decision: <DecisionReveal /> }[view.round?.type] ?? null;
       break;
     case 'game_over':
       screen = <GameOver />;
@@ -86,7 +96,6 @@ export default function App() {
   const { view } = useGame();
   return (
     <>
-      <Backdrop />
       <AnimatePresence mode="wait">
         {view ? (
           <FrozenWhenExiting key="game">

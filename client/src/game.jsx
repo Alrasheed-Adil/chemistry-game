@@ -11,6 +11,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useIsPresent } from 'framer-motion';
 import { io } from 'socket.io-client';
+import { useLang } from './i18n.jsx';
 
 const socket = io({ transports: ['websocket', 'polling'] });
 
@@ -49,6 +50,9 @@ export function GameProvider({ children }) {
   const [view, setView] = useState(null);
   const [connected, setConnected] = useState(socket.connected);
   const [toasts, setToasts] = useState([]);
+  const { t } = useLang();
+  const tRef = useRef(t);
+  tRef.current = t;
   const offset = useRef(0); // serverTime - clientTime, for accurate countdowns
 
   const notify = useCallback((message, tone = 'error') => {
@@ -62,8 +66,8 @@ export function GameProvider({ children }) {
     (event, payload = {}, { silent = false } = {}) =>
       new Promise((resolve) => {
         socket.timeout(8000).emit(event, payload, (err, res) => {
-          const result = err ? { ok: false, error: 'Server did not respond. Check your connection.' } : res;
-          if (!result?.ok && !silent) notify(result?.error ?? 'Something went wrong.');
+          const result = err ? { ok: false, code: 'timeout' } : res;
+          if (!result?.ok && !silent) notify(tRef.current(`errors.${result?.code ?? 'generic'}`));
           resolve(result);
         });
       }),
@@ -94,11 +98,11 @@ export function GameProvider({ children }) {
     const onDisconnect = () => setConnected(false);
     const onKicked = () => {
       resetLocal();
-      notify('The host removed you from the room.');
+      notify(tRef.current('errors.kicked'));
     };
     const onReplaced = () => {
       setView(null);
-      notify('You opened this game in another tab.', 'info');
+      notify(tRef.current('errors.replaced'), 'info');
     };
 
     socket.on('room:state', onState);
@@ -135,6 +139,7 @@ export function GameProvider({ children }) {
       leaveTeam: () => call('team:leave'),
       renameTeam: (teamId, name) => call('team:rename', { teamId, name }),
       submitSync: (answer, prediction) => call('sync:submit', { answer, prediction }),
+      submitDecision: (choice, prediction) => call('decision:submit', { choice, prediction }),
       pickTile: (index) => call('telepathy:pick', { index }),
       lockTile: () => call('telepathy:lock'),
       host: {

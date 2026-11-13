@@ -3,7 +3,8 @@
  * pushes personalised state snapshots back to every player in the room.
  *
  * Every client → server event uses an acknowledgement callback:
- *   socket.emit('team:join', { teamId }, (res) => res.ok ? … : showError(res.error))
+ *   socket.emit('team:join', { teamId }, (res) => res.ok ? … : showError(res.code))
+ * Failures carry a language-neutral `code` that the client translates.
  */
 
 import { GameError, Room, clean, generateCode } from './room.js';
@@ -47,17 +48,17 @@ export function registerSockets(io) {
           reply({ ok: true, ...(result ?? {}) });
         } catch (err) {
           if (!(err instanceof GameError)) console.error(`[${event}]`, err);
-          reply({ ok: false, error: err instanceof GameError ? err.message : 'Something went wrong.' });
+          reply({ ok: false, code: err instanceof GameError ? err.code : 'generic' });
         }
       });
 
     const current = () => {
-      if (!room || !pid || !room.players.has(pid)) throw new GameError('You are not in a room.');
+      if (!room || !pid || !room.players.has(pid)) throw new GameError('not_in_room');
       return room;
     };
 
     const validPlayerId = (id) => {
-      if (typeof id !== 'string' || id.length < 8 || id.length > 64) throw new GameError('Invalid session.');
+      if (typeof id !== 'string' || id.length < 8 || id.length > 64) throw new GameError('invalid_session');
       return id;
     };
 
@@ -78,7 +79,7 @@ export function registerSockets(io) {
 
     on('room:create', ({ name, playerId }) => {
       validPlayerId(playerId);
-      if (!clean(name, 16)) throw new GameError('Please enter your name first.');
+      if (!clean(name, 16)) throw new GameError('name_required');
       const code = generateCode(rooms);
       const created = new Room(code, broadcast);
       rooms.set(code, created);
@@ -87,7 +88,7 @@ export function registerSockets(io) {
 
     on('room:join', ({ code, name, playerId }) => {
       const target = rooms.get(String(code ?? '').trim().toUpperCase());
-      if (!target) throw new GameError("Couldn't find that room — double-check the code.");
+      if (!target) throw new GameError('room_not_found');
       return attach(target, validPlayerId(playerId), name);
     });
 
@@ -107,6 +108,7 @@ export function registerSockets(io) {
     /* --------------------------- gameplay ---------------------------- */
 
     on('sync:submit', ({ answer, prediction }) => current().submitSync(pid, { answer, prediction }));
+    on('decision:submit', ({ choice, prediction }) => current().submitDecision(pid, { choice, prediction }));
     on('telepathy:pick', ({ index }) => current().pickTile(pid, index));
     on('telepathy:lock', () => current().lockTile(pid));
 

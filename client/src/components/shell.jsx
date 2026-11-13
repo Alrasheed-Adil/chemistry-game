@@ -1,17 +1,19 @@
 /**
- * Persistent chrome around game screens: top header, scoreboard, and the
- * host control bar (the "Host Dashboard" controls shown only to the host).
+ * Persistent chrome around game screens: header, the Readings scoreboard,
+ * the host console (host-only controls) and lock-in progress.
  */
 
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useState } from 'react';
 import { useGame } from '../game.jsx';
-import { Avatar, Button, Logo, cx, useBusy } from './ui.jsx';
+import { elementOf, pairName, useLang } from '../i18n.jsx';
+import { Avatar, Button, ElementTile, LangToggle, Logo, cx, useBusy } from './ui.jsx';
 
 /* ------------------------------- Header -------------------------------- */
 
 export function Header() {
   const { view, connected, isHost, actions, notify } = useGame();
+  const { t } = useLang();
   const [copied, setCopied] = useState(false);
   const link = `${window.location.origin}/?room=${view.code}`;
 
@@ -19,224 +21,243 @@ export function Header() {
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
+      notify(t('header.copied'), 'info');
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      notify(`Share this link: ${link}`, 'info');
+      notify(link, 'info');
     }
   };
 
   const leave = () => {
-    if (window.confirm('Leave this room?')) actions.leaveRoom();
+    if (window.confirm(t('header.leaveConfirm'))) actions.leaveRoom();
   };
 
   return (
-    <header className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
-      <div className="flex items-center gap-2">
-        <Logo size={30} />
-        <span className="hidden font-display text-xl font-extrabold tracking-tight sm:inline">chemistry</span>
-      </div>
+    <header className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-6">
+      <Logo />
 
       <button
         onClick={copy}
-        className="glass group ml-1 flex items-center gap-2 rounded-full py-1.5 pr-3 pl-4 transition hover:border-electric-400/40"
-        title="Copy invite link"
+        title={t('header.copy')}
+        className="group ms-1 flex h-9 items-center gap-2 rounded-[var(--radius-control)] border border-line bg-bench ps-3 pe-2.5 transition hover:border-ink/40"
       >
-        <span className="font-display text-lg font-extrabold tracking-[0.2em]">{view.code}</span>
-        <span className="text-xs font-bold text-white/50 group-hover:text-white/80">{copied ? 'Copied!' : 'Copy link'}</span>
+        <span className="text-sm text-graphite">{t('header.session')}</span>
+        <span dir="ltr" className="tabular text-[15px] font-semibold tracking-[0.12em]">
+          {view.code}
+        </span>
+        <CopyIcon done={copied} />
       </button>
 
-      <div className="ml-auto flex items-center gap-2">
-        {isHost ? <span className="chip text-amber-300">👑 Host</span> : null}
+      <div className="ms-auto flex items-center gap-2">
+        {isHost ? (
+          <span className="hidden h-9 items-center rounded-[var(--radius-control)] bg-ink px-3 text-sm font-medium text-white sm:inline-flex">
+            {t('header.host')}
+          </span>
+        ) : null}
         <span
-          className={cx('size-2.5 rounded-full', connected ? 'bg-emerald-400' : 'animate-pulse bg-coral-500')}
-          title={connected ? 'Connected' : 'Reconnecting…'}
+          className={cx('size-2.5 rounded-full', connected ? 'bg-react' : 'animate-pulse bg-acid')}
+          title={connected ? t('header.online') : t('header.offline')}
+          role="status"
+          aria-label={connected ? t('header.online') : t('header.offline')}
         />
+        <LangToggle />
         <Button variant="ghost" size="sm" onClick={leave}>
-          Leave
+          {t('header.leave')}
         </Button>
       </div>
     </header>
   );
 }
 
+function CopyIcon({ done }) {
+  return done ? (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="text-react" aria-hidden>
+      <path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="text-graphite group-hover:text-ink" aria-hidden>
+      <rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 10.5V3.5A1.5 1.5 0 0 1 4.5 2h6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /* ------------------------------ Scoreboard ----------------------------- */
 
 /**
- * Team standings. During a reveal it previews the points each team is about
- * to earn this round (`+N`) before the host confirms.
+ * Pair standings ("Readings"). During a reveal it previews the points each
+ * pair is about to earn before the host confirms.
  */
 export function Scoreboard({ compact }) {
   const { view, playersById, myTeam } = useGame();
+  const { t, L } = useLang();
   const pending = view.state === 'revealing' ? view.round?.results ?? {} : {};
-  const teams = [...view.teams]
-    .filter((t) => t.members.length || t.score)
-    .sort((a, b) => b.score + (pending[b.id]?.points ?? 0) - (a.score + (pending[a.id]?.points ?? 0)));
+  const total = (team) => team.score + (pending[team.id]?.points ?? 0);
+  const teams = [...view.teams].filter((tm) => tm.members.length || tm.score).sort((a, b) => total(b) - total(a));
 
   if (!teams.length) return null;
 
   return (
-    <div className={cx('glass rounded-3xl', compact ? 'p-2' : 'p-4')}>
-      {!compact ? <h3 className="label mb-3 px-1">Scoreboard</h3> : null}
+    <section className={cx('bench', compact ? 'p-1.5' : 'p-4')} aria-label={t('board.title')}>
+      {!compact ? <h3 className="mb-3 px-1 text-sm font-medium text-ink-soft">{t('board.title')}</h3> : null}
       <LayoutGroup>
-        <ol className={cx(compact ? 'flex gap-2 overflow-x-auto' : 'space-y-2')}>
+        <ol className={cx(compact ? 'flex gap-1.5 overflow-x-auto' : 'space-y-1')}>
           {teams.map((team, i) => {
+            const el = elementOf(team);
             const gain = pending[team.id]?.points;
             return (
               <motion.li
                 layout
                 key={team.id}
-                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 34 }}
                 className={cx(
-                  'flex items-center gap-2.5 rounded-2xl border px-3 py-2',
-                  compact && 'shrink-0',
-                  team.id === myTeam?.id ? 'border-white/20 bg-white/8' : 'border-transparent bg-white/[0.03]',
+                  'flex items-center gap-2.5 rounded-[var(--radius-control)] px-2 py-1.5',
+                  compact && 'shrink-0 pe-3',
+                  team.id === myTeam?.id && 'bg-glass',
                 )}
               >
-                <span className="w-4 text-center text-xs font-bold text-white/40">{i + 1}</span>
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: team.color, boxShadow: `0 0 10px ${team.color}` }} />
-                <span className="flex -space-x-2">
-                  {team.members.map((id) => (
-                    <Avatar key={id} player={playersById[id]} size="xs" />
-                  ))}
+                {!compact ? <span className="tabular w-4 text-center text-xs text-graphite">{i + 1}</span> : null}
+                <ElementTile symbol={el.symbol} number={el.number} color={el.color} size="xs" />
+                <span className={cx('min-w-0 truncate text-sm font-medium', compact ? 'max-w-28' : 'flex-1')}>
+                  {pairName(team, L)}
                 </span>
-                <span className={cx('min-w-0 truncate text-sm font-semibold', compact ? 'max-w-28' : 'flex-1')}>{team.name}</span>
+                {!compact ? (
+                  <span className="flex -space-x-1.5 rtl:space-x-reverse">
+                    {team.members.map((id) => (
+                      <Avatar key={id} player={playersById[id]} size="xs" />
+                    ))}
+                  </span>
+                ) : null}
                 <AnimatePresence>
                   {gain ? (
                     <motion.span
-                      initial={{ opacity: 0, scale: 0.6 }}
-                      animate={{ opacity: 1, scale: 1 }}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="text-xs font-bold text-emerald-300"
+                      dir="ltr"
+                      className="tabular text-xs font-semibold text-react"
                     >
                       +{gain}
                     </motion.span>
                   ) : null}
                 </AnimatePresence>
-                <motion.span
-                  key={team.score}
-                  initial={{ scale: 1.5, color: '#c084fc' }}
-                  animate={{ scale: 1, color: '#ffffff' }}
-                  className="font-display text-lg font-extrabold tabular-nums"
-                >
-                  {team.score}
-                </motion.span>
+                <span className="tabular min-w-5 text-end text-base font-semibold">{team.score}</span>
               </motion.li>
             );
           })}
         </ol>
       </LayoutGroup>
-    </div>
+    </section>
   );
 }
 
-/* ------------------------------ Host bar ------------------------------- */
+/* ----------------------------- Host console ---------------------------- */
 
-/** Floating control bar for the host during a game. */
+const consoleBtn =
+  'inline-flex h-9 items-center rounded-[var(--radius-control)] px-3.5 text-sm font-medium transition disabled:opacity-40';
+
+/** Dark control strip pinned to the bottom of the host's screen. */
 export function HostBar() {
   const { view, actions } = useGame();
+  const { t } = useLang();
   const [busy, run] = useBusy();
   const { state, round } = view;
   if (state === 'waiting') return null;
 
-  const active = state === 'question_active' || state === 'telepathy_active';
+  const active = state === 'question_active' || state === 'telepathy_active' || state === 'decision_active';
   const isLast = round && round.number >= view.totalRounds;
 
   let status = null;
   if (active && round) {
-    const ids = round.teams.flatMap((t) => t.members);
-    const doneMap = round.type === 'sync' ? round.submitted : round.locked;
-    const done = ids.filter((id) => doneMap?.[id]).length;
-    status = `${done}/${ids.length} locked in`;
-  } else if (state === 'revealing' && round?.type === 'sync') {
-    status = 'Review matches, then confirm';
+    const ids = round.teams.flatMap((tm) => tm.members);
+    const doneMap = round.type === 'telepathy' ? round.locked : round.submitted;
+    status = t('host.progress', { done: ids.filter((id) => doneMap?.[id]).length, total: ids.length });
   } else if (state === 'revealing') {
-    status = 'Grid revealed';
+    status = round?.type === 'sync' ? t('host.review') : t('host.revealed');
   } else if (state === 'game_over') {
-    status = 'Game over';
+    status = t('host.over');
   }
 
   const end = () => {
-    if (window.confirm('End the game now and show final results?')) run(actions.host.end);
+    if (window.confirm(t('host.endConfirm'))) run(actions.host.end);
   };
 
   return (
     <motion.div
-      initial={{ y: 80, opacity: 0 }}
+      initial={{ y: 70, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
-      <div className="glass mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-3xl border-amber-300/20 bg-ink-800/80 p-2 pl-4">
-        <div className="mr-auto flex min-w-0 items-center gap-2 py-1">
-          <span className="text-lg">👑</span>
-          <div className="min-w-0 leading-tight">
-            <div className="text-[11px] font-bold tracking-[0.14em] text-amber-300/80 uppercase">Host controls</div>
-            <div className="truncate text-sm text-white/70">{status}</div>
-          </div>
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-[var(--radius-surface)] bg-ink p-2 ps-4 text-white shadow-[0_12px_40px_-12px_rgba(19,35,58,.6)]">
+        <div className="me-auto min-w-0 py-1 leading-tight">
+          <div className="text-sm font-medium">{t('host.title')}</div>
+          <div className="truncate text-[13px] text-white/65">{status}</div>
         </div>
 
         {active ? (
           <>
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(actions.host.reroll)}>
-              🔀 Swap
-            </Button>
-            <Button variant="secondary" size="sm" disabled={busy} onClick={() => run(actions.host.reveal)}>
-              Reveal now
-            </Button>
+            <button className={cx(consoleBtn, 'text-white/80 hover:bg-white/10')} disabled={busy} onClick={() => run(actions.host.reroll)}>
+              {t('host.swap')}
+            </button>
+            <button className={cx(consoleBtn, 'bg-white/12 hover:bg-white/20')} disabled={busy} onClick={() => run(actions.host.reveal)}>
+              {t('host.reveal')}
+            </button>
           </>
         ) : null}
 
         {state === 'revealing' ? (
-          <Button size="sm" busy={busy} onClick={() => run(actions.host.next)}>
-            {isLast ? 'Final results →' : 'Confirm & next →'}
-          </Button>
+          <button className={cx(consoleBtn, 'bg-white text-ink hover:bg-glass')} disabled={busy} onClick={() => run(actions.host.next)}>
+            {isLast ? t('host.final') : t('host.next')}
+          </button>
         ) : null}
 
         {state === 'game_over' ? (
-          <Button size="sm" busy={busy} onClick={() => run(actions.host.lobby)}>
-            Back to lobby
-          </Button>
+          <button className={cx(consoleBtn, 'bg-white text-ink hover:bg-glass')} disabled={busy} onClick={() => run(actions.host.lobby)}>
+            {t('host.lobby')}
+          </button>
         ) : (
-          <Button variant="danger" size="sm" disabled={busy} onClick={end}>
-            End
-          </Button>
+          <button className={cx(consoleBtn, 'text-[#ff9a9a] hover:bg-white/10')} disabled={busy} onClick={end}>
+            {t('host.end')}
+          </button>
         )}
       </div>
     </motion.div>
   );
 }
 
-/* --------------------------- Team progress ----------------------------- */
+/* --------------------------- Lock-in progress -------------------------- */
 
-/** Grid of teams showing who has locked in — used by host & spectators. */
+/** Which pairs have locked in — shown to the host and spectators. */
 export function TeamProgress() {
   const { view, playersById, teamsById } = useGame();
+  const { t, L } = useLang();
   const { round } = view;
-  const doneMap = round.type === 'sync' ? round.submitted : round.locked;
+  const doneMap = round.type === 'telepathy' ? round.locked : round.submitted;
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {round.teams.map(({ teamId, members }) => {
-        const team = teamsById[teamId];
-        return (
-          <div key={teamId} className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
-            <span className="size-2.5 rounded-full" style={{ background: team?.color }} />
-            <span className="flex-1 truncate font-semibold">{team?.name}</span>
-            {members.map((id) => (
-              <motion.span
-                key={id}
-                animate={{ scale: doneMap?.[id] ? [1, 1.25, 1] : 1 }}
-                className="flex items-center"
-              >
-                <Avatar
-                  player={playersById[id]}
-                  size="sm"
-                  dim={!doneMap?.[id]}
-                  ring={doneMap?.[id] ? '#34d399' : undefined}
-                />
-              </motion.span>
-            ))}
-          </div>
-        );
-      })}
-    </div>
+    <section>
+      <h3 className="label">{t('round.progress')}</h3>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {round.teams.map(({ teamId, members }) => {
+          const team = teamsById[teamId];
+          const el = elementOf(team);
+          return (
+            <div key={teamId} className="bench flex items-center gap-3 px-3 py-2.5">
+              <ElementTile symbol={el.symbol} number={el.number} color={el.color} size="xs" />
+              <span className="flex-1 truncate text-sm font-medium">{pairName(team, L)}</span>
+              {members.map((id) => (
+                <Avatar key={id} player={playersById[id]} size="sm" dim={!doneMap?.[id]} ring={doneMap?.[id] ? '#23905a' : undefined} />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
+}
+
+/** Note shown instead of the input area to the host / spectators. */
+export function SpectatorNote() {
+  const { isHost } = useGame();
+  const { t } = useLang();
+  return <p className="bench px-5 py-4 text-ink-soft">{isHost ? t('round.hosting') : t('round.spectating')}</p>;
 }

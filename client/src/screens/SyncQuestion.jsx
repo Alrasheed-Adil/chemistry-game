@@ -1,37 +1,31 @@
 /**
- * Sync mode — `question_active`.
- * Players type their own answer + a prediction of their partner's answer.
- * Host-only / spectators see live lock-in progress for every team.
+ * Sync — `question_active`.
+ * Players type their own answer and a prediction of their partner's.
+ * The host (if not playing) and spectators see lock-in progress.
  */
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import { TeamProgress } from '../components/shell.jsx';
-import { Avatar, Button, PromptCard, Screen, TimerRing, useBusy } from '../components/ui.jsx';
+import { SpectatorNote, TeamProgress } from '../components/shell.jsx';
+import { Avatar, Button, PromptCard, Screen, useBusy } from '../components/ui.jsx';
 import { playerName, useGame } from '../game.jsx';
+import { useLang } from '../i18n.jsx';
 
 export default function SyncQuestion() {
   const { view, isPlaying } = useGame();
   const { round } = view;
-
   return (
     <Screen className="space-y-5">
-      <PromptCard
-        round={round}
-        total={view.totalRounds}
-        right={<TimerRing deadline={round.deadline} total={view.settings.questionSeconds} size={72} />}
-      />
+      <PromptCard round={round} total={view.totalRounds} timerTotal={view.settings.questionSeconds} active />
       {isPlaying ? <AnswerForm key={round.deadline} /> : <SpectatorNote />}
-      <div>
-        <h3 className="label">Who's locked in</h3>
-        <TeamProgress />
-      </div>
+      <TeamProgress />
     </Screen>
   );
 }
 
 function AnswerForm() {
   const { view, actions, roundTeam, playersById } = useGame();
+  const { t } = useLang();
   const { round } = view;
   const partnerId = roundTeam.members.find((m) => m !== view.you);
   const partner = playersById[partnerId];
@@ -44,7 +38,6 @@ function AnswerForm() {
   const [editing, setEditing] = useState(!submitted);
   const [busy, run] = useBusy();
 
-  // Server state is the source of truth (e.g. after a refresh).
   useEffect(() => {
     if (submitted) setEditing(false);
   }, [submitted]);
@@ -63,19 +56,19 @@ function AnswerForm() {
         <motion.form
           key="form"
           onSubmit={submit}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.97 }}
-          className="grid gap-4 sm:grid-cols-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="bench grid gap-5 p-5 sm:grid-cols-2 sm:p-6"
         >
-          <div className="glass rounded-3xl p-4 sm:p-5">
+          <div>
             <label className="label" htmlFor="answer">
-              Your answer
+              {t('sync.yourAnswer')}
             </label>
             <input
               id="answer"
               className="field text-lg"
-              placeholder="Be honest…"
+              placeholder={t('sync.answerPlaceholder')}
               maxLength={60}
               autoComplete="off"
               autoFocus
@@ -83,68 +76,69 @@ function AnswerForm() {
               onChange={(e) => setAnswer(e.target.value)}
             />
           </div>
-          <div className="glass rounded-3xl bg-gradient-to-br from-electric-500/15 to-transparent p-4 sm:p-5">
+          <div>
             <label className="label flex items-center gap-2" htmlFor="prediction">
-              <Avatar player={partner} size="xs" /> What will {partnerName} say?
+              <Avatar player={partner} size="xs" />
+              {t('sync.predict', { name: partnerName })}
             </label>
             <input
               id="prediction"
               className="field text-lg"
-              placeholder="Read their mind…"
+              placeholder={t('sync.predictPlaceholder')}
               maxLength={60}
               autoComplete="off"
               value={prediction}
               onChange={(e) => setPrediction(e.target.value)}
             />
           </div>
-          <Button
-            type="submit"
-            size="lg"
-            className="sm:col-span-2"
-            busy={busy}
-            disabled={!answer.trim() || !prediction.trim()}
-          >
-            Lock it in 🔒
+          <Button type="submit" size="lg" className="sm:col-span-2" busy={busy} disabled={!answer.trim() || !prediction.trim()}>
+            {t('sync.lock')}
           </Button>
         </motion.form>
       ) : (
-        <motion.div
+        <LockedPanel
           key="locked"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="glass flex flex-col items-center gap-3 rounded-3xl p-6 text-center sm:flex-row sm:text-left"
-        >
-          <motion.span
-            animate={{ rotate: [0, -10, 10, 0] }}
-            transition={{ duration: 0.6 }}
-            className="text-5xl"
-          >
-            🔒
-          </motion.span>
-          <div className="flex-1">
-            <div className="font-display text-2xl font-extrabold">Locked in!</div>
-            <p className="text-white/60">
-              {partnerDone ? 'Revealing…' : `Waiting for ${partnerName} — no peeking, no hints.`}
-            </p>
-          </div>
-          {!partnerDone ? (
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-              Change answer
-            </Button>
-          ) : null}
-        </motion.div>
+          title={t('sync.lockedTitle')}
+          body={partnerDone ? t('sync.revealing') : t('sync.waitingFor', { name: partnerName })}
+          action={
+            !partnerDone ? (
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                {t('sync.change')}
+              </Button>
+            ) : null
+          }
+        />
       )}
     </AnimatePresence>
   );
 }
 
-function SpectatorNote() {
-  const { isHost } = useGame();
+/** "Sealed sample" panel shown after locking in. */
+export function LockedPanel({ title, body, action }) {
   return (
-    <div className="glass rounded-3xl p-5 text-white/70">
-      {isHost
-        ? "You're hosting this round. Answers appear here once every team locks in — or hit “Reveal now”."
-        : "You're spectating this round. Watch the teams lock in!"}
-    </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0 }}
+      className="bench flex flex-col items-start gap-4 p-5 sm:flex-row sm:items-center sm:p-6"
+    >
+      <SealIcon />
+      <div className="flex-1">
+        <div className="text-xl font-semibold">{title}</div>
+        <p className="text-ink-soft">{body}</p>
+      </div>
+      {action}
+    </motion.div>
+  );
+}
+
+/** A stoppered vial — the answer is sealed. */
+function SealIcon() {
+  return (
+    <svg width="40" height="48" viewBox="0 0 40 48" aria-hidden className="shrink-0">
+      <rect x="12" y="2" width="16" height="9" rx="2" fill="#13233A" />
+      <path d="M14 11h12v8l7 20a5 5 0 0 1-4.7 7H11.7A5 5 0 0 1 7 39l7-20z" fill="#fff" stroke="#13233A" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M10.3 31h19.4l3.1 8.5a3 3 0 0 1-2.8 4.5H10a3 3 0 0 1-2.8-4.5z" fill="#23905a" opacity=".85" />
+    </svg>
   );
 }

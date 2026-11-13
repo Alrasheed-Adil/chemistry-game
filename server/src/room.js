@@ -1,47 +1,67 @@
 /**
- * Room — the authoritative game state machine for one lobby.
+ * Room — the authoritative game state machine for one lab session.
  *
  * The Room knows nothing about sockets. Every mutation ends with `this.emit()`,
  * which calls the `onChange` callback supplied by the socket layer; that layer
  * then sends each player a personalised snapshot via `toView(playerId)`.
  *
  * Room states:
- *   waiting           — lobby: players join, form teams of 2, host tweaks settings
- *   question_active   — Sync round: everyone types an answer + a prediction
- *   telepathy_active  — Telepathy round: everyone silently picks a grid tile
- *   revealing         — results of the current round (sync or telepathy) are shown;
- *                       in sync rounds the host can override matches here
- *   game_over         — final scoreboard
+ *   waiting           — lobby: players join, form pairs, host picks the tests
+ *   question_active   — Sync trial: type an answer + predict your partner's
+ *   telepathy_active  — Telepathy trial: silently pick a well on the plate
+ *   decision_active   — Decision trial: pick A–D for a situation + predict partner
+ *   revealing         — results of the current trial (any type); in Sync the
+ *                       host can override matches here
+ *   game_over         — final lab report
+ *
+ * Errors are thrown as GameError(code). Codes are translated on the client
+ * (see client/src/i18n.jsx → errors.*), so the server stays language-neutral.
  */
 
-import { AVATARS, TEAM_COLORS, TEAM_NAMES, buildTelepathyGrid, drawSyncPrompt, shuffle } from './content.js';
+import { AVATARS, ELEMENT_COUNT, buildTelepathyGrid, drawDecision, drawSyncPrompt, shuffle } from './content.js';
 import { judge } from './matching.js';
 
-export class GameError extends Error {}
+export class GameError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+}
 
 export const STATES = Object.freeze({
   WAITING: 'waiting',
   QUESTION_ACTIVE: 'question_active',
   TELEPATHY_ACTIVE: 'telepathy_active',
+  DECISION_ACTIVE: 'decision_active',
   REVEALING: 'revealing',
   GAME_OVER: 'game_over',
 });
 
+const ACTIVE_STATES = new Set([STATES.QUESTION_ACTIVE, STATES.TELEPATHY_ACTIVE, STATES.DECISION_ACTIVE]);
+const STATE_FOR_TYPE = {
+  sync: STATES.QUESTION_ACTIVE,
+  telepathy: STATES.TELEPATHY_ACTIVE,
+  decision: STATES.DECISION_ACTIVE,
+};
+
+export const TESTS = Object.freeze(['sync', 'telepathy', 'decision']);
+
 export const POINTS = Object.freeze({
-  prediction: 1, // each correct prediction of your partner's answer
-  jinx: 1, // bonus when both partners gave the same answer themselves
-  telepathy: 2, // both partners picked the same tile
+  prediction: 1, // Sync + Decision: each correct prediction of your partner
+  jinx: 1, // Sync: both partners gave the same answer
+  sameChoice: 1, // Decision: both partners chose the same option
+  telepathy: 2, // Telepathy: both picked the same well
 });
 
 const SETTING_OPTIONS = {
-  mode: ['mixed', 'sync', 'telepathy'],
   rounds: [3, 4, 5, 6, 8, 10, 12],
   questionSeconds: [30, 45, 60, 90, 120],
   telepathySeconds: [8, 10, 15, 20, 30],
+  decisionSeconds: [15, 20, 30, 45, 60],
 };
 
 const LIMITS = { name: 16, teamName: 24, answer: 60, players: 24 };
-const HOST_GRACE_MS = 20_000; // how long a disconnected host keeps the crown
+const HOST_GRACE_MS = 20_000; // how long a disconnected host keeps the role
 const TIMER_GRACE_MS = 600; // small buffer so late keystrokes still count
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 confusion
@@ -63,16 +83,21 @@ export class Room {
     this.hostId = null;
     /** @type {Map<string, {id,name,avatar,teamId,connected,socketId,joinedAt}>} */
     this.players = new Map();
-    /** @type {Map<string, {id,name,color,members:string[],score:number}>} */
+    /** @type {Map<string, {id,element,name:string|null,members:string[],score:number}>} */
     this.teams = new Map();
     this.state = STATES.WAITING;
-    this.settings = { mode: 'mixed', rounds: 6, questionSeconds: 60, telepathySeconds: 15 };
+    this.settings = {
+      tests: [...TESTS],
+      rounds: 6,
+      questionSeconds: 60,
+      telepathySeconds: 15,
+      decisionSeconds: 30,
+    };
     this.plan = [];
     this.roundIndex = 0;
     this.round = null;
     this.history = [];
-    this.usedSync = new Set();
-    this.usedTelepathy = new Set();
+    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set() };
     this.teamCounter = 0;
     this.timer = null;
     this.hostTimer = null;
@@ -87,17 +112,21 @@ export class Room {
   }
 
   requireHost(pid) {
-    if (pid !== this.hostId) throw new GameError('Only the host can do that.');
+    if (pid !== this.hostId) throw new GameError('host_only');
   }
 
   requireLobby() {
-    if (this.state !== STATES.WAITING) throw new GameError('Teams are locked while a game is running.');
+    if (this.state !== STATES.WAITING) throw new GameError('game_running');
   }
 
   requirePlayer(pid) {
     const p = this.players.get(pid);
-    if (!p) throw new GameError('You are not in this room.');
+    if (!p) throw new GameError('not_in_room');
     return p;
+  }
+
+  requireActive(type) {
+    if (this.state !== STATE_FOR_TYPE[type]) throw new GameError('answers_closed');
   }
 
   teamOf(pid) {
@@ -113,11 +142,11 @@ export class Room {
     return this.round ? this.round.teams.flatMap((t) => t.members) : [];
   }
 
-  isActivePlayer(pid) {
-    return this.activePlayerIds().includes(pid);
+  requireActivePlayer(pid) {
+    if (!this.activePlayerIds().includes(pid)) throw new GameError('spectating');
   }
 
-  /** Active players who are still in the room (left players can't block a round). */
+  /** Active players who are still in the room (people who left can't block a trial). */
   pendingPlayerIds() {
     return this.activePlayerIds().filter((pid) => this.players.has(pid));
   }
@@ -149,8 +178,8 @@ export class Room {
       if (newName) p.name = newName;
     } else {
       const n = clean(name, LIMITS.name);
-      if (!n) throw new GameError('Please enter your name first.');
-      if (this.players.size >= LIMITS.players) throw new GameError('This room is full.');
+      if (!n) throw new GameError('name_required');
+      if (this.players.size >= LIMITS.players) throw new GameError('room_full');
       const used = new Set([...this.players.values()].map((x) => x.avatar));
       const avatar = shuffle(AVATARS).find((a) => !used.has(a)) ?? AVATARS[0];
       p = { id: pid, name: n, avatar, teamId: null, connected: true, socketId, joinedAt: Date.now() };
@@ -207,12 +236,12 @@ export class Room {
 
   kick(hostPid, targetPid) {
     this.requireHost(hostPid);
-    if (targetPid === hostPid) throw new GameError("You can't kick yourself.");
+    if (targetPid === hostPid) throw new GameError('cannot_kick_self');
     this.requirePlayer(targetPid);
     this.leave(targetPid);
   }
 
-  /* ------------------------------- teams ------------------------------- */
+  /* ------------------------------- pairs ------------------------------- */
 
   detachFromTeam(pid) {
     const p = this.players.get(pid);
@@ -225,13 +254,13 @@ export class Room {
   }
 
   newTeam(firstMember) {
-    const usedNames = new Set([...this.teams.values()].map((t) => t.name));
-    const usedColors = new Set([...this.teams.values()].map((t) => t.color));
+    const usedElements = new Set([...this.teams.values()].map((t) => t.element));
+    const free = shuffle([...Array(ELEMENT_COUNT).keys()]).find((i) => !usedElements.has(i));
     const id = `t${++this.teamCounter}`;
     const team = {
       id,
-      name: shuffle(TEAM_NAMES).find((n) => !usedNames.has(n)) ?? `Team ${this.teamCounter}`,
-      color: TEAM_COLORS.find((c) => !usedColors.has(c)) ?? TEAM_COLORS[this.teamCounter % TEAM_COLORS.length],
+      element: free ?? this.teamCounter % ELEMENT_COUNT,
+      name: null, // null → client shows the element's localized name
       members: [],
       score: 0,
     };
@@ -242,9 +271,9 @@ export class Room {
 
   putOnTeam(pid, teamId) {
     const team = this.teams.get(teamId);
-    if (!team) throw new GameError('That team no longer exists.');
+    if (!team) throw new GameError('team_gone');
     if (team.members.includes(pid)) return;
-    if (team.members.length >= 2) throw new GameError('That team is already full.');
+    if (team.members.length >= 2) throw new GameError('team_full');
     this.detachFromTeam(pid);
     team.members.push(pid);
     this.players.get(pid).teamId = teamId;
@@ -273,15 +302,14 @@ export class Room {
 
   renameTeam(pid, teamId, name) {
     const team = this.teams.get(teamId);
-    if (!team) throw new GameError('That team no longer exists.');
-    if (!team.members.includes(pid) && pid !== this.hostId) throw new GameError('Only team members can rename it.');
+    if (!team) throw new GameError('team_gone');
+    if (!team.members.includes(pid) && pid !== this.hostId) throw new GameError('rename_forbidden');
     const n = clean(name, LIMITS.teamName);
-    if (!n) throw new GameError('Team name cannot be empty.');
-    team.name = n;
+    team.name = n || null; // empty → back to the element name
     this.emit();
   }
 
-  /** Host: move any player to a team (`teamId`), a brand-new team (`'new'`), or the bench (`null`). */
+  /** Host: move any player to a pair (`teamId`), a brand-new pair (`'new'`), or off pairs (`null`). */
   assign(hostPid, targetPid, teamId) {
     this.requireHost(hostPid);
     this.requireLobby();
@@ -292,18 +320,16 @@ export class Room {
     this.emit();
   }
 
-  /** Host: pair up everyone without a team (host excluded — they join manually if playing). */
+  /** Host: pair up everyone without a pair (host excluded — they join manually if playing). */
   autoPair(hostPid) {
     this.requireHost(hostPid);
     this.requireLobby();
     const free = shuffle(
       [...this.players.values()].filter((p) => !p.teamId && p.id !== this.hostId).map((p) => p.id),
     );
-    // Fill half-empty teams first…
     for (const team of this.teams.values()) {
       if (team.members.length === 1 && free.length) this.putOnTeam(free.shift(), team.id);
     }
-    // …then pair the rest. An odd player out gets a solo team waiting for a partner.
     while (free.length) {
       const team = this.newTeam(free.shift());
       if (free.length) this.putOnTeam(free.shift(), team.id);
@@ -314,9 +340,14 @@ export class Room {
   updateSettings(hostPid, patch = {}) {
     this.requireHost(hostPid);
     this.requireLobby();
+    if ('tests' in patch) {
+      const tests = Array.isArray(patch.tests) ? TESTS.filter((t) => patch.tests.includes(t)) : [];
+      if (!tests.length) throw new GameError('need_one_test');
+      this.settings.tests = tests;
+    }
     for (const [key, options] of Object.entries(SETTING_OPTIONS)) {
       if (key in patch) {
-        if (!options.includes(patch[key])) throw new GameError(`Invalid value for ${key}.`);
+        if (!options.includes(patch[key])) throw new GameError('invalid_setting');
         this.settings[key] = patch[key];
       }
     }
@@ -328,14 +359,12 @@ export class Room {
   start(hostPid) {
     this.requireHost(hostPid);
     this.requireLobby();
-    if (!this.fullTeams().length) throw new GameError('You need at least one full team of 2 to start.');
+    if (!this.fullTeams().length) throw new GameError('need_full_team');
     for (const team of this.teams.values()) team.score = 0;
     this.history = [];
     this.roundIndex = 0;
-    const { mode, rounds } = this.settings;
-    this.plan = Array.from({ length: rounds }, (_, i) =>
-      mode === 'mixed' ? (i % 2 === 0 ? 'sync' : 'telepathy') : mode,
-    );
+    const { tests, rounds } = this.settings;
+    this.plan = Array.from({ length: rounds }, (_, i) => tests[i % tests.length]);
     this.startRound();
   }
 
@@ -344,54 +373,53 @@ export class Room {
     if (!teams.length) return this.finish();
 
     const type = this.plan[this.roundIndex];
-    const base = { number: this.roundIndex + 1, type, teams, startedAt: Date.now() };
+    const seconds = {
+      sync: this.settings.questionSeconds,
+      telepathy: this.settings.telepathySeconds,
+      decision: this.settings.decisionSeconds,
+    }[type];
+    const round = {
+      number: this.roundIndex + 1,
+      type,
+      teams,
+      startedAt: Date.now(),
+      deadline: Date.now() + seconds * 1000,
+    };
 
     if (type === 'sync') {
-      const seconds = this.settings.questionSeconds;
-      this.round = {
-        ...base,
-        prompt: drawSyncPrompt(this.usedSync),
-        deadline: Date.now() + seconds * 1000,
-        submissions: {},
-        verdicts: null,
-        autoVerdicts: null,
-      };
-      this.state = STATES.QUESTION_ACTIVE;
-      this.setTimer(seconds, () => this.reveal());
+      Object.assign(round, { prompt: drawSyncPrompt(this.used.sync), submissions: {}, verdicts: null, autoVerdicts: null });
+    } else if (type === 'telepathy') {
+      Object.assign(round, buildTelepathyGrid(this.used.telepathy), { picks: {}, locked: {} });
     } else {
-      const seconds = this.settings.telepathySeconds;
-      const { prompt, grid } = buildTelepathyGrid(this.usedTelepathy);
-      this.round = {
-        ...base,
-        prompt,
-        grid,
-        deadline: Date.now() + seconds * 1000,
-        picks: {},
-        locked: {},
-      };
-      this.state = STATES.TELEPATHY_ACTIVE;
-      this.setTimer(seconds, () => this.reveal());
+      const decision = drawDecision(this.used.decision);
+      Object.assign(round, {
+        prompt: { category: decision.category, text: decision.text },
+        choices: decision.choices,
+        submissions: {},
+      });
     }
+
+    this.round = round;
+    this.state = STATE_FOR_TYPE[type];
+    this.setTimer(seconds, () => this.reveal());
     this.emit();
   }
 
-  /** Host: swap the current prompt/grid for a fresh one and restart the clock. */
+  /** Host: swap the current prompt/grid/situation for a fresh one and restart the clock. */
   reroll(hostPid) {
     this.requireHost(hostPid);
-    if (this.state !== STATES.QUESTION_ACTIVE && this.state !== STATES.TELEPATHY_ACTIVE) {
-      throw new GameError('Nothing to swap right now.');
-    }
+    if (!ACTIVE_STATES.has(this.state)) throw new GameError('nothing_to_swap');
     this.startRound();
   }
 
-  /* Sync mode ----------------------------------------------------------- */
+  /* Sync ------------------------------------------------------------------ */
 
   submitSync(pid, { answer, prediction } = {}) {
-    if (this.state !== STATES.QUESTION_ACTIVE) throw new GameError('Answers are closed for this round.');
-    if (!this.isActivePlayer(pid)) throw new GameError("You're spectating this round.");
+    this.requireActive('sync');
+    this.requireActivePlayer(pid);
     const a = clean(answer, LIMITS.answer);
     const p = clean(prediction, LIMITS.answer);
-    if (!a || !p) throw new GameError('Fill in both your answer and your prediction.');
+    if (!a || !p) throw new GameError('fill_both');
     this.round.submissions[pid] = { answer: a, prediction: p };
     if (!this.checkRoundComplete()) this.emit();
   }
@@ -411,62 +439,81 @@ export class Room {
     this.round.autoVerdicts = { ...verdicts };
   }
 
-  /** Host override: mark any prediction / jinx as a match or a miss. */
+  /** Host override: mark any Sync prediction / jinx as a match or a miss. */
   setVerdict(hostPid, key, value) {
     this.requireHost(hostPid);
-    if (this.state !== STATES.REVEALING || this.round?.type !== 'sync') throw new GameError('Nothing to verify right now.');
-    if (!(key in this.round.verdicts)) throw new GameError('Unknown answer.');
-    if (value !== 'match' && value !== 'miss') throw new GameError('Invalid verdict.');
+    if (this.state !== STATES.REVEALING || this.round?.type !== 'sync') throw new GameError('nothing_to_verify');
+    if (!(key in this.round.verdicts)) throw new GameError('unknown_answer');
+    if (value !== 'match' && value !== 'miss') throw new GameError('invalid_verdict');
     this.round.verdicts[key] = value;
     this.emit();
   }
 
-  /* Telepathy mode ------------------------------------------------------- */
+  /* Decision -------------------------------------------------------------- */
+
+  submitDecision(pid, { choice, prediction } = {}) {
+    this.requireActive('decision');
+    this.requireActivePlayer(pid);
+    const n = this.round.choices.length;
+    const valid = (v) => Number.isInteger(v) && v >= 0 && v < n;
+    if (!valid(choice) || !valid(prediction)) throw new GameError('pick_both');
+    this.round.submissions[pid] = { choice, prediction };
+    if (!this.checkRoundComplete()) this.emit();
+  }
+
+  /* Telepathy ------------------------------------------------------------- */
 
   pickTile(pid, index) {
-    if (this.state !== STATES.TELEPATHY_ACTIVE) throw new GameError('The grid is closed.');
-    if (!this.isActivePlayer(pid)) throw new GameError("You're spectating this round.");
-    if (this.round.locked[pid]) throw new GameError("You've already locked in.");
+    if (this.state !== STATES.TELEPATHY_ACTIVE) throw new GameError('grid_closed');
+    this.requireActivePlayer(pid);
+    if (this.round.locked[pid]) throw new GameError('already_locked');
     if (!Number.isInteger(index) || index < 0 || index >= this.round.grid.items.length) {
-      throw new GameError('Invalid tile.');
+      throw new GameError('invalid_tile');
     }
     this.round.picks[pid] = index;
     this.emit();
   }
 
   lockTile(pid) {
-    if (this.state !== STATES.TELEPATHY_ACTIVE) throw new GameError('The grid is closed.');
-    if (!this.isActivePlayer(pid)) throw new GameError("You're spectating this round.");
-    if (this.round.picks[pid] == null) throw new GameError('Pick a tile first.');
+    if (this.state !== STATES.TELEPATHY_ACTIVE) throw new GameError('grid_closed');
+    this.requireActivePlayer(pid);
+    if (this.round.picks[pid] == null) throw new GameError('pick_first');
     this.round.locked[pid] = true;
     if (!this.checkRoundComplete()) this.emit();
   }
 
-  /* Shared round lifecycle ---------------------------------------------- */
+  /* Shared trial lifecycle ------------------------------------------------ */
+
+  /** Has this player finished the current trial? */
+  isDone(pid) {
+    const r = this.round;
+    if (!r) return false;
+    return r.type === 'telepathy' ? Boolean(r.locked[pid]) : Boolean(r.submissions[pid]);
+  }
 
   /** Auto-reveal once every active player has submitted/locked. Returns true if it revealed. */
   checkRoundComplete() {
+    if (!ACTIVE_STATES.has(this.state)) return false;
     const pending = this.pendingPlayerIds();
-    if (this.state === STATES.QUESTION_ACTIVE) {
-      if (pending.length && pending.every((pid) => this.round.submissions[pid])) return this.reveal(), true;
-    } else if (this.state === STATES.TELEPATHY_ACTIVE) {
-      if (pending.length && pending.every((pid) => this.round.locked[pid])) return this.reveal(), true;
+    if (pending.length && pending.every((pid) => this.isDone(pid))) {
+      this.reveal();
+      return true;
     }
     return false;
   }
 
-  /** Move from an active round to `revealing`. Called by timer, auto-complete or host. */
+  /** Move from an active trial to `revealing`. Called by timer, auto-complete or host. */
   reveal(hostPid) {
     if (hostPid !== undefined) this.requireHost(hostPid);
-    if (this.state === STATES.QUESTION_ACTIVE) this.revealSync();
-    else if (this.state !== STATES.TELEPATHY_ACTIVE) return;
+    if (!ACTIVE_STATES.has(this.state)) return;
+    if (this.round.type === 'sync') this.revealSync();
     this.clearTimer();
     this.state = STATES.REVEALING;
     this.round.revealedAt = Date.now();
     this.emit();
   }
 
-  /** Per-team results of the current round (computed live so host overrides update instantly). */
+  /** Per-pair results of the current trial (live, so host overrides update instantly). */
   roundResults() {
     const r = this.round;
     if (!r || (this.state !== STATES.REVEALING && this.state !== STATES.GAME_OVER)) return null;
@@ -483,6 +530,17 @@ export class Room {
           predictionsCorrect,
           jinx,
         };
+      } else if (r.type === 'decision') {
+        const sa = r.submissions[a];
+        const sb = r.submissions[b];
+        const predictionsCorrect = (sa && sb ? [sa.prediction === sb.choice, sb.prediction === sa.choice] : []).filter(Boolean).length;
+        const same = Boolean(sa && sb && sa.choice === sb.choice);
+        results[teamId] = {
+          points: predictionsCorrect * POINTS.prediction + (same ? POINTS.sameChoice : 0),
+          max: 2 * POINTS.prediction + POINTS.sameChoice,
+          predictionsCorrect,
+          same,
+        };
       } else {
         const match = r.picks[a] != null && r.picks[a] === r.picks[b];
         results[teamId] = { points: match ? POINTS.telepathy : 0, max: POINTS.telepathy, match };
@@ -491,16 +549,16 @@ export class Room {
     return results;
   }
 
-  /** Host: lock in the current round's points and move on. */
+  /** Host: lock in the current trial's points and move on. */
   next(hostPid) {
     this.requireHost(hostPid);
-    if (this.state !== STATES.REVEALING) throw new GameError('Reveal the round first.');
+    if (this.state !== STATES.REVEALING) throw new GameError('reveal_first');
     const results = this.roundResults();
     for (const [teamId, res] of Object.entries(results)) {
       const team = this.teams.get(teamId);
       if (team) team.score += res.points;
     }
-    this.history.push({ number: this.round.number, type: this.round.type, prompt: this.round.prompt, results });
+    this.history.push({ number: this.round.number, type: this.round.type, results });
     this.roundIndex += 1;
     if (this.roundIndex >= this.plan.length) this.finish();
     else this.startRound();
@@ -509,14 +567,15 @@ export class Room {
   finish() {
     this.clearTimer();
     this.state = STATES.GAME_OVER;
+    this.endedAt = Date.now();
     this.emit();
   }
 
   endGame(hostPid) {
     this.requireHost(hostPid);
-    if (this.state === STATES.WAITING) throw new GameError('The game has not started.');
+    if (this.state === STATES.WAITING) throw new GameError('not_started');
     if (this.state === STATES.GAME_OVER) return;
-    this.round = null; // discard an unfinished round
+    this.round = null; // discard an unfinished trial
     this.finish();
   }
 
@@ -537,8 +596,8 @@ export class Room {
   /* ----------------------------- serialisation -------------------------- */
 
   /**
-   * Snapshot sent to one specific player. Answers/picks of other players are
-   * hidden until the reveal so nobody can peek at their partner's devtools.
+   * Snapshot sent to one specific player. Other players' answers/picks are
+   * hidden until the reveal so nobody can peek at their partner in devtools.
    */
   toView(forPid) {
     const r = this.round;
@@ -552,18 +611,8 @@ export class Room {
         deadline: r.deadline,
         revealedAt: r.revealedAt ?? null,
       };
-      const active = this.state === STATES.QUESTION_ACTIVE || this.state === STATES.TELEPATHY_ACTIVE;
-      if (r.type === 'sync') {
-        if (active) {
-          round.submitted = Object.fromEntries(Object.keys(r.submissions).map((pid) => [pid, true]));
-          round.mine = r.submissions[forPid] ?? null;
-        } else {
-          round.submissions = r.submissions;
-          round.verdicts = r.verdicts;
-          round.autoVerdicts = r.autoVerdicts;
-          round.results = this.roundResults();
-        }
-      } else {
+      const active = ACTIVE_STATES.has(this.state);
+      if (r.type === 'telepathy') {
         round.grid = r.grid;
         if (active) {
           round.picked = Object.fromEntries(Object.keys(r.picks).map((pid) => [pid, true]));
@@ -571,6 +620,19 @@ export class Room {
           round.mine = r.picks[forPid] ?? null;
         } else {
           round.picks = r.picks;
+          round.results = this.roundResults();
+        }
+      } else {
+        if (r.type === 'decision') round.choices = r.choices;
+        if (active) {
+          round.submitted = Object.fromEntries(Object.keys(r.submissions).map((pid) => [pid, true]));
+          round.mine = r.submissions[forPid] ?? null;
+        } else {
+          round.submissions = r.submissions;
+          if (r.type === 'sync') {
+            round.verdicts = r.verdicts;
+            round.autoVerdicts = r.autoVerdicts;
+          }
           round.results = this.roundResults();
         }
       }
@@ -581,9 +643,10 @@ export class Room {
       you: forPid,
       hostId: this.hostId,
       state: this.state,
-      settings: { ...this.settings },
+      settings: { ...this.settings, tests: [...this.settings.tests] },
       points: POINTS,
       serverNow: Date.now(),
+      endedAt: this.endedAt ?? null,
       totalRounds: this.plan.length || this.settings.rounds,
       players: [...this.players.values()].map(({ id, name, avatar, teamId, connected }) => ({
         id,

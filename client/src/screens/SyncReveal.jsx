@@ -1,116 +1,118 @@
 /**
- * Sync mode — `revealing`.
- * Answers & predictions are shown side by side per team. Auto-matching marks
- * clear hits; "close" calls (and anything else) can be overridden by the host.
+ * Sync — `revealing`.
+ * Answers and predictions side by side per pair. Auto-matching marks clear
+ * hits; inconclusive calls (and anything else) can be overridden by the host.
  */
 
-import { motion } from 'framer-motion';
-import { Avatar, Confetti, PromptCard, Screen, cx } from '../components/ui.jsx';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Avatar, Bubbles, ElementTile, PromptCard, Screen, cx } from '../components/ui.jsx';
 import { playerName, useGame } from '../game.jsx';
+import { elementOf, pairName, useLang } from '../i18n.jsx';
 
 export default function SyncReveal() {
   const { view, isHost, roundTeam } = useGame();
+  const { t } = useLang();
   const { round } = view;
-  // Show the viewer's own team first.
   const teams = [...round.teams].sort((a, b) => (b === roundTeam) - (a === roundTeam));
   const mine = roundTeam ? round.results?.[roundTeam.teamId] : null;
   const hasClose = Object.values(round.verdicts ?? {}).includes('close');
 
   return (
     <Screen className="space-y-5">
-      {mine && mine.points >= 2 ? <Confetti /> : null}
+      {mine && mine.points >= 2 ? <Bubbles /> : null}
       <PromptCard round={round} total={view.totalRounds} />
 
       {isHost ? (
-        <div className="glass flex items-start gap-3 rounded-2xl border-amber-300/25 p-4 text-sm text-amber-100/90">
-          <span className="text-xl">⚖️</span>
-          <p>
-            <b>You're the judge.</b> Tap ✓ or ✗ on any guess to override the auto-match.
-            {hasClose ? ' Amber “close” calls score nothing until you approve them.' : ''}
+        <div className="flex items-start gap-3 rounded-[var(--radius-surface)] border border-amber/40 bg-amber/[0.07] px-4 py-3">
+          <span className="mt-1 size-2.5 shrink-0 rounded-full bg-amber" />
+          <p className="text-[15px]">
+            <span className="font-semibold">{t('sync.judgeTitle')}</span> {t('sync.judgeBody')}
           </p>
         </div>
-      ) : (
-        <p className="text-center text-sm text-white/50">The host is reviewing close calls…</p>
-      )}
+      ) : hasClose ? (
+        <p className="text-sm text-graphite">{t('sync.reviewing')}</p>
+      ) : null}
 
       <div className={cx('grid gap-4', teams.length > 1 && 'xl:grid-cols-2')}>
-        {teams.map((t, i) => (
-          <TeamReveal key={t.teamId} roundTeam={t} index={i} highlight={t === roundTeam} />
+        {teams.map((rt, i) => (
+          <PairResult key={rt.teamId} roundTeam={rt} index={i} highlight={rt === roundTeam} />
         ))}
       </div>
     </Screen>
   );
 }
 
-function TeamReveal({ roundTeam, index, highlight }) {
+function PairResult({ roundTeam, index, highlight }) {
   const { view, teamsById, isHost } = useGame();
+  const { t, L } = useLang();
+  const reduce = useReducedMotion();
   const { round } = view;
   const team = teamsById[roundTeam.teamId];
+  const el = elementOf(team);
   const result = round.results?.[roundTeam.teamId];
   const [a, b] = roundTeam.members;
   const jinxKey = `jinx:${roundTeam.teamId}`;
   const jinx = round.verdicts?.[jinxKey];
-  const sa = round.submissions?.[a];
-  const sb = round.submissions?.[b];
+  const bothAnswered = round.submissions?.[a] && round.submissions?.[b];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30, rotateX: -15 }}
-      animate={{ opacity: 1, y: 0, rotateX: 0 }}
-      transition={{ delay: 0.15 + index * 0.12, type: 'spring', stiffness: 180, damping: 20 }}
-      className={cx('glass relative overflow-hidden rounded-3xl p-4 sm:p-5', highlight && 'ring-2 ring-white/20')}
+    <motion.article
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 + index * 0.1, duration: 0.35 }}
+      className={cx('bench p-4 sm:p-5', highlight && 'outline-2 outline-offset-[-1px] outline-ink')}
     >
-      <div className="absolute -top-20 -left-10 size-48 rounded-full opacity-25 blur-3xl" style={{ background: team?.color }} />
+      <header className="mb-4 flex items-center gap-3">
+        <ElementTile symbol={el.symbol} number={el.number} color={el.color} size="sm" />
+        <h3 className="flex-1 truncate text-lg font-semibold">{pairName(team, L)}</h3>
+        <PointsBadge points={result?.points ?? 0} />
+      </header>
 
-      <div className="relative mb-4 flex items-center gap-2">
-        <span className="size-3 rounded-full" style={{ background: team?.color }} />
-        <h3 className="flex-1 truncate font-display text-xl font-bold">{team?.name}</h3>
-        <motion.span
-          key={result?.points}
-          initial={{ scale: 1.4 }}
-          animate={{ scale: 1 }}
-          className={cx(
-            'rounded-full px-3 py-1 font-display text-lg font-extrabold',
-            result?.points ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/5 text-white/40',
-          )}
-        >
-          +{result?.points ?? 0}
-        </motion.span>
+      <div className="grid grid-cols-2 gap-3">
+        <SubjectColumn pid={a} partnerId={b} delay={0.25 + index * 0.1} />
+        <SubjectColumn pid={b} partnerId={a} delay={0.4 + index * 0.1} />
       </div>
 
-      <div className="relative grid grid-cols-2 gap-3">
-        <PlayerColumn pid={a} partnerId={b} delay={0.3 + index * 0.12} />
-        <PlayerColumn pid={b} partnerId={a} delay={0.45 + index * 0.12} />
-      </div>
-
-      {/* Jinx bonus: both partners gave the same answer */}
-      {sa && sb ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 + index * 0.12 }}
+      {bothAnswered ? (
+        <div
           className={cx(
-            'relative mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-sm',
-            jinx === 'match' ? 'bg-electric-500/15 text-electric-200' : 'bg-white/[0.03] text-white/45',
+            'mt-3 flex items-center gap-2 rounded-[var(--radius-control)] border px-3 py-2 text-sm',
+            jinx === 'match' && 'border-react/40 bg-react/[0.07] text-react',
+            jinx === 'close' && 'border-amber/40 bg-amber/[0.07]',
+            jinx === 'miss' && 'border-line-soft text-graphite',
           )}
         >
-          <span>{jinx === 'match' ? '⚡' : '·'}</span>
           <span className="flex-1">
-            {jinx === 'match'
-              ? `Jinx! Same answer · +${view.points.jinx}`
-              : jinx === 'close'
-                ? 'Similar answers — jinx bonus?'
-                : 'Different answers'}
+            {jinx === 'match' ? t('sync.jinxYes', { n: view.points.jinx }) : jinx === 'close' ? t('sync.jinxClose') : t('sync.jinxNo')}
           </span>
           {isHost ? <VerdictToggle verdictKey={jinxKey} /> : null}
-        </motion.div>
+        </div>
       ) : null}
-    </motion.div>
+    </motion.article>
   );
 }
 
-function PlayerColumn({ pid, partnerId, delay }) {
+export function PointsBadge({ points }) {
+  return (
+    <motion.span
+      key={points}
+      initial={{ scale: 1.3 }}
+      animate={{ scale: 1 }}
+      dir="ltr"
+      className={cx(
+        'tabular rounded-full px-3 py-0.5 text-base font-semibold',
+        points ? 'bg-react text-white' : 'bg-glass text-graphite',
+      )}
+    >
+      +{points}
+    </motion.span>
+  );
+}
+
+function SubjectColumn({ pid, partnerId, delay }) {
   const { view, playersById, isHost } = useGame();
+  const { t } = useLang();
+  const reduce = useReducedMotion();
   const { round } = view;
   const sub = round.submissions?.[pid];
   const key = `pred:${pid}`;
@@ -119,38 +121,36 @@ function PlayerColumn({ pid, partnerId, delay }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, rotateY: 90 }}
-      animate={{ opacity: 1, rotateY: 0 }}
-      transition={{ delay, duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
+      initial={reduce ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay, duration: 0.3 }}
       className="flex min-w-0 flex-col gap-2"
     >
       <div className="flex items-center gap-2">
         <Avatar player={playersById[pid]} size="sm" />
-        <span className="truncate text-sm font-bold">{playerName(playersById, pid)}</span>
+        <span className="truncate text-sm font-medium">{playerName(playersById, pid)}</span>
       </div>
 
-      <div className="rounded-2xl bg-white/[0.06] p-3">
-        <div className="text-[10px] font-bold tracking-[0.14em] text-white/40 uppercase">Answered</div>
-        <div className="font-display text-lg leading-tight font-bold break-words">
-          {sub?.answer ?? <span className="text-white/30 italic">no answer</span>}
+      <div className="rounded-[var(--radius-control)] bg-glass px-3 py-2.5">
+        <div className="text-xs text-graphite">{t('sync.answer')}</div>
+        <div className="text-lg leading-snug font-semibold break-words">
+          {sub?.answer ?? <span className="font-normal text-graphite">{t('sync.noAnswer')}</span>}
         </div>
       </div>
 
       <div
         className={cx(
-          'rounded-2xl border p-3 transition-colors',
-          verdict === 'match' && 'border-emerald-400/40 bg-emerald-400/10',
-          verdict === 'close' && 'border-amber-300/40 bg-amber-300/10',
-          verdict === 'miss' && 'border-white/5 bg-white/[0.03]',
+          'rounded-[var(--radius-control)] border px-3 py-2.5 transition-colors',
+          verdict === 'match' && 'border-react/50 bg-react/[0.06]',
+          verdict === 'close' && 'border-amber/50 bg-amber/[0.07]',
+          verdict === 'miss' && 'border-line-soft',
         )}
       >
-        <div className="text-[10px] font-bold tracking-[0.14em] text-white/40 uppercase">
-          Guessed {playerName(playersById, partnerId)}
-        </div>
-        <div className="leading-tight break-words">{sub?.prediction ?? <span className="text-white/30 italic">—</span>}</div>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <VerdictBadge verdict={verdict} />
-          {overridden ? <span className="text-[10px] font-bold text-amber-300/80 uppercase">host call</span> : null}
+        <div className="text-xs text-graphite">{t('sync.prediction', { name: playerName(playersById, partnerId) })}</div>
+        <div className="leading-snug break-words">{sub?.prediction ?? <span className="text-graphite">—</span>}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <OutcomeChip outcome={verdict} />
+          {overridden ? <span className="text-[11px] text-graphite">{t('outcome.hostCall')}</span> : null}
         </div>
         {isHost && sub ? <VerdictToggle verdictKey={key} className="mt-2" /> : null}
       </div>
@@ -158,16 +158,19 @@ function PlayerColumn({ pid, partnerId, delay }) {
   );
 }
 
-function VerdictBadge({ verdict }) {
-  const map = {
-    match: ['✓ Nailed it', 'text-emerald-300'],
-    close: ['≈ Close call', 'text-amber-300'],
-    miss: ['✗ Nope', 'text-white/40'],
+export function OutcomeChip({ outcome }) {
+  const { t } = useLang();
+  const styles = {
+    match: 'text-react',
+    close: 'text-amber',
+    miss: 'text-graphite',
   };
-  const [text, color] = map[verdict] ?? map.miss;
+  const dot = { match: 'bg-react', close: 'bg-amber', miss: 'bg-line' };
+  const o = outcome ?? 'miss';
   return (
-    <motion.span key={verdict} initial={{ scale: 0.7 }} animate={{ scale: 1 }} className={cx('text-xs font-bold', color)}>
-      {text}
+    <motion.span key={o} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} className={cx('inline-flex items-center gap-1.5 text-xs font-semibold', styles[o])}>
+      <span className={cx('size-2 rounded-full', dot[o])} />
+      {t(`outcome.${o}`)}
     </motion.span>
   );
 }
@@ -175,23 +178,25 @@ function VerdictBadge({ verdict }) {
 /** Host-only ✓ / ✗ override buttons. */
 function VerdictToggle({ verdictKey, className }) {
   const { view, actions } = useGame();
+  const { t } = useLang();
   const current = view.round.verdicts?.[verdictKey];
-  const btn = (value, label, activeClass) => (
+  const btn = (value, label, aria, activeClass) => (
     <button
       onClick={() => actions.host.verdict(verdictKey, value)}
-      className={cx(
-        'h-8 flex-1 rounded-xl border text-sm font-bold transition',
-        current === value ? activeClass : 'border-white/10 text-white/50 hover:bg-white/10 hover:text-white',
-      )}
+      aria-label={aria}
       aria-pressed={current === value}
+      className={cx(
+        'h-8 flex-1 rounded-[8px] border text-sm font-semibold transition',
+        current === value ? activeClass : 'border-line bg-bench text-graphite hover:border-ink/40 hover:text-ink',
+      )}
     >
       {label}
     </button>
   );
   return (
     <div className={cx('flex min-w-24 gap-1.5', className)}>
-      {btn('match', '✓', 'border-emerald-400/60 bg-emerald-400/20 text-emerald-200')}
-      {btn('miss', '✗', 'border-coral-500/60 bg-coral-500/20 text-coral-200')}
+      {btn('match', '✓', t('sync.accept'), 'border-react bg-react text-white')}
+      {btn('miss', '✗', t('sync.reject'), 'border-ink bg-ink text-white')}
     </div>
   );
 }
