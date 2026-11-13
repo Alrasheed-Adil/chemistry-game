@@ -259,12 +259,14 @@ function HostPlayerMenu({ player }) {
 
 /* ------------------------------ Protocol ------------------------------- */
 
-const TEST_KEYS = ['sync', 'telepathy', 'decision', 'priority'];
+const TEST_KEYS = ['sync', 'telepathy', 'decision', 'priority', 'rather'];
+const THEME_KEYS = ['light', 'deep', 'bonds'];
 const TIMER_FIELDS = {
   sync: { key: 'questionSeconds', values: [45, 60, 90, 120] },
   telepathy: { key: 'telepathySeconds', values: [10, 15, 20, 30] },
   decision: { key: 'decisionSeconds', values: [20, 30, 45, 60] },
   priority: { key: 'prioritySeconds', values: [30, 45, 60, 90] },
+  rather: { key: 'ratherSeconds', values: [15, 20, 30, 45] },
 };
 
 function Protocol() {
@@ -275,6 +277,10 @@ function Protocol() {
   const toggleTest = (key) => {
     const next = s.tests.includes(key) ? s.tests.filter((x) => x !== key) : [...s.tests, key];
     set({ tests: next });
+  };
+  const toggleTheme = (key) => {
+    const next = s.themes.includes(key) ? s.themes.filter((x) => x !== key) : [...s.themes, key];
+    set({ themes: next });
   };
 
   return (
@@ -311,6 +317,36 @@ function Protocol() {
                 </span>
                 <span className="flex-1 text-[15px] font-medium">{t(`tests.${key}.name`)}</span>
               </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="mt-4">
+        <legend className="label">{t('lobby.themes')}</legend>
+        <div className="grid grid-cols-3 gap-1.5">
+          {THEME_KEYS.map((key) => {
+            const on = s.themes.includes(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                disabled={!isHost}
+                aria-pressed={on}
+                title={t(`themes.${key}.desc`)}
+                onClick={() => toggleTheme(key)}
+                className={cx(
+                  'flex flex-col items-start rounded-[var(--radius-control)] border px-2.5 py-2 text-start transition',
+                  on ? 'border-ink bg-bench' : 'border-line bg-glass/60 text-graphite',
+                  isHost && !on && 'hover:border-ink/40',
+                )}
+              >
+                <span className="flex items-center gap-1.5 text-[15px] font-semibold">
+                  <span className={cx('size-2 rounded-full', on ? 'bg-ink' : 'bg-line')} />
+                  {t(`themes.${key}.name`)}
+                </span>
+                <span className="text-[11px] leading-tight text-graphite">{t(`themes.${key}.desc`)}</span>
+              </button>
             );
           })}
         </div>

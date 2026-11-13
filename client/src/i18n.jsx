@@ -21,7 +21,7 @@ const en = {
 
   landing: {
     title: 'A compatibility test for two people.',
-    lead: 'Run four experiments with your partner. Finish with a lab report that measures how well you really know each other.',
+    lead: 'Run five experiments with your partner. Finish with a lab report that measures how well you really know each other.',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Sam',
     create: 'Start a session',
@@ -41,6 +41,13 @@ const en = {
     telepathy: { name: 'Telepathy', desc: 'Without talking, pick the same well on the plate as your partner.' },
     decision: { name: 'Decision', desc: 'Choose what you’d do in a situation, and predict your partner’s choice.' },
     priority: { name: 'Priorities', desc: 'Rank four things from 1 to 4. Every item you both put in the same place scores.' },
+    rather: { name: 'Would you rather', desc: 'Two hard options. Choose one, and predict which your partner chose.' },
+  },
+
+  themes: {
+    light: { name: 'Light', desc: 'Everyday, playful questions' },
+    deep: { name: 'Deep', desc: 'Philosophy, meaning and values' },
+    bonds: { name: 'Bonds', desc: 'Relationships, trust and feelings' },
   },
 
   header: {
@@ -79,6 +86,7 @@ const en = {
     protocol: 'Test protocol',
     protocolReadonly: 'Set by the host',
     tests: 'Experiments',
+    themes: 'Question themes',
     rounds: 'Rounds',
     timers: 'Time limits',
     seconds: '{n}s',
@@ -97,7 +105,13 @@ const en = {
       wave: 'Same wavelength',
       blank: 'Fill in the blank',
       decide: 'Situation',
+      dilemma: 'Dilemma',
       rank: 'Ranking',
+      rather: 'Two hard options',
+      self: 'Inner self',
+      meaning: 'Meaning',
+      values: 'Values',
+      bond: 'Bonds',
     },
     progress: 'Locked in',
     spectating: 'You’re watching this round.',
@@ -161,6 +175,13 @@ const en = {
     noRanking: 'No ranking',
   },
 
+  rather: {
+    you: 'Which would you choose?',
+    partner: 'Which will {name} choose?',
+    or: 'or',
+    lockedTitle: 'Choice locked in',
+  },
+
   telepathy: {
     instruction: 'No talking or gestures. Pick the well you think your partner will pick.',
     pickWell: 'Pick a well',
@@ -205,6 +226,7 @@ const en = {
     telepathyStat: 'Telepathy: {a} of {b} matched',
     decisionStat: 'Decision: {a} of {b} predictions',
     priorityStat: 'Priorities: {a} of {b} ranks matched',
+    ratherStat: 'Would you rather: {a} of {b} predictions',
     supervised: 'Supervised by {name}',
     points: '{n} points',
     noRounds: 'No rounds were completed, so there’s nothing to report.',
@@ -240,6 +262,7 @@ const en = {
     fill_both: 'Fill in your answer and your prediction.',
     pick_both: 'Choose an option for yourself and one for your partner.',
     rank_all: 'Place all four items before locking in.',
+    need_one_theme: 'Keep at least one question theme selected.',
     nothing_to_verify: 'There are no results to check right now.',
     unknown_answer: 'That answer no longer exists.',
     invalid_verdict: 'Choose match or no match.',
@@ -264,7 +287,7 @@ const ar = {
 
   landing: {
     title: 'اختبار توافق لشخصين.',
-    lead: 'أجريا أربع تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
+    lead: 'أجريا خمس تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
     nameLabel: 'اسمك',
     namePlaceholder: 'مثال: سارة',
     create: 'ابدأ جلسة',
@@ -284,6 +307,13 @@ const ar = {
     telepathy: { name: 'توارد خواطر', desc: 'دون أي كلام، اختر نفس الخانة التي يختارها شريكك.' },
     decision: { name: 'قرار', desc: 'اختر ما ستفعله في موقف ما، وتوقّع اختيار شريكك.' },
     priority: { name: 'أولويات', desc: 'رتّب أربعة أشياء من 1 إلى 4. كل عنصر تضعانه في نفس المرتبة يُحتسب نقطة.' },
+    rather: { name: 'هذا أو ذاك', desc: 'خياران صعبان. اختر أحدهما، وتوقّع ما اختاره شريكك.' },
+  },
+
+  themes: {
+    light: { name: 'خفيفة', desc: 'أسئلة يومية ممتعة' },
+    deep: { name: 'عميقة', desc: 'فلسفة ومعنى وقيم' },
+    bonds: { name: 'روابط', desc: 'العلاقات والثقة والمشاعر' },
   },
 
   header: {
@@ -322,6 +352,7 @@ const ar = {
     protocol: 'بروتوكول الاختبار',
     protocolReadonly: 'يحدده المضيف',
     tests: 'التجارب',
+    themes: 'مواضيع الأسئلة',
     rounds: 'الجولات',
     timers: 'المدة',
     seconds: '{n} ث',
@@ -340,7 +371,13 @@ const ar = {
       wave: 'نفس الموجة',
       blank: 'أكمل الفراغ',
       decide: 'موقف',
+      dilemma: 'معضلة',
       rank: 'ترتيب',
+      rather: 'خياران صعبان',
+      self: 'الذات',
+      meaning: 'المعنى',
+      values: 'القيم',
+      bond: 'الروابط',
     },
     progress: 'من أكّد',
     spectating: 'أنت تشاهد هذه الجولة.',
@@ -404,6 +441,13 @@ const ar = {
     noRanking: 'لا يوجد ترتيب',
   },
 
+  rather: {
+    you: 'أيهما تختار؟',
+    partner: 'أيهما سيختار {name} برأيك؟',
+    or: 'أو',
+    lockedTitle: 'تم تأكيد اختيارك',
+  },
+
   telepathy: {
     instruction: 'بدون كلام أو إشارات. اختر الخانة التي تظن أن شريكك سيختارها.',
     pickWell: 'اختر خانة',
@@ -448,6 +492,7 @@ const ar = {
     telepathyStat: 'توارد خواطر: تطابق {a} من {b}',
     decisionStat: 'قرار: {a} من {b} توقعات',
     priorityStat: 'أولويات: تطابق {a} من {b} مراتب',
+    ratherStat: 'هذا أو ذاك: {a} من {b} توقعات',
     supervised: 'بإشراف {name}',
     points: '{n} نقطة',
     noRounds: 'لم تكتمل أي جولة، لذا لا يوجد ما يُكتب في التقرير.',
@@ -483,6 +528,7 @@ const ar = {
     fill_both: 'اكتب إجابتك وتوقّعك.',
     pick_both: 'اختر خيارًا لنفسك وآخر لشريكك.',
     rank_all: 'رتّب العناصر الأربعة قبل التأكيد.',
+    need_one_theme: 'اترك موضوعًا واحدًا على الأقل مختارًا.',
     nothing_to_verify: 'لا توجد نتائج للمراجعة الآن.',
     unknown_answer: 'هذه الإجابة لم تعد موجودة.',
     invalid_verdict: 'اختر تطابق أو لا تطابق.',
@@ -528,6 +574,7 @@ export const TEST_TILES = {
   telepathy: { symbol: 'Tp', number: 2 },
   decision: { symbol: 'Dc', number: 3 },
   priority: { symbol: 'Pr', number: 4 },
+  rather: { symbol: 'Wr', number: 5 },
 };
 
 /** Compatibility % → bond classification. */

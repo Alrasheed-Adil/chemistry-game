@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DECISIONS, PRIORITIES, SYNC_PROMPTS } from '../src/content.js';
+import { DECISIONS, PRIORITIES, RATHERS, SYNC_PROMPTS, THEMES } from '../src/content.js';
 import { judge } from '../src/matching.js';
 import { Room } from '../src/room.js';
 
@@ -23,7 +23,16 @@ test('judge: Arabic spelling variants', () => {
   assert.equal(judge('قطة', 'كلب'), 'miss');
 });
 
-test('content: every prompt and choice is bilingual', () => {
+test('content: every prompt and choice is bilingual and themed', () => {
+  for (const list of [SYNC_PROMPTS, DECISIONS, PRIORITIES, RATHERS]) {
+    for (const entry of list) assert.ok(THEMES.includes(entry.theme), JSON.stringify(entry.text));
+    // every experiment has questions in every theme
+    for (const theme of THEMES) assert.ok(list.some((e) => e.theme === theme), theme);
+  }
+  for (const r of RATHERS) {
+    assert.equal(r.choices.length, 2);
+    for (const c of r.choices) assert.ok(c.en && c.ar);
+  }
   for (const p of SYNC_PROMPTS) assert.ok(p.text.en && p.text.ar, JSON.stringify(p));
   for (const d of DECISIONS) {
     assert.ok(d.text.en && d.text.ar);
@@ -140,5 +149,37 @@ test('settings: all four experiments cycle in order', () => {
   const room = setupRoom(['sync', 'telepathy', 'decision', 'priority']);
   room.start('host-0001');
   assert.deepEqual(room.plan, ['sync', 'telepathy', 'decision', 'priority', 'sync', 'telepathy']);
+  room.dispose();
+});
+
+test('would you rather: two options, predict + same choice', () => {
+  const room = setupRoom(['rather']);
+  const [team] = room.fullTeams();
+  const [a, b] = team.members;
+  room.start('host-0001');
+  assert.equal(room.state, 'rather_active');
+  assert.equal(room.toView(a).round.choices.length, 2);
+  assert.throws(() => room.submitDecision(a, { choice: 2, prediction: 0 }), /pick_both/);
+  room.submitDecision(a, { choice: 0, prediction: 1 });
+  room.submitDecision(b, { choice: 1, prediction: 0 });
+  assert.equal(room.state, 'revealing');
+  // both predicted correctly, different choices → 2
+  assert.deepEqual(room.roundResults()[team.id], { points: 2, max: 3, predictionsCorrect: 2, same: false });
+  room.dispose();
+});
+
+test('themes: rounds only draw questions from the selected themes', () => {
+  const room = setupRoom(['sync', 'decision', 'priority', 'rather']);
+  room.updateSettings('host-0001', { themes: ['deep'], rounds: 12 });
+  assert.throws(() => room.updateSettings('host-0001', { themes: [] }), /need_one_theme/);
+  room.start('host-0001');
+  const [team] = room.fullTeams();
+  for (let i = 0; i < 12; i++) {
+    assert.equal(room.round.prompt.theme ?? room.round.theme, 'deep', `round ${i + 1}: ${room.round.type}`);
+    room.reveal('host-0001');
+    room.next('host-0001');
+  }
+  assert.equal(room.state, 'game_over');
+  assert.ok(team);
   room.dispose();
 });

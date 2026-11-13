@@ -1,6 +1,6 @@
 # Chemistry lab
 
-A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run four experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
+A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run five experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
 
 The game is fully bilingual in **English and العربية (Arabic, right-to-left)**. Each player picks their own language, so a mixed group sees every prompt in their own language.
 
@@ -11,7 +11,18 @@ The game is fully bilingual in **English and العربية (Arabic, right-to-le
 | **Sy** | **Sync** | Everyone gets the same prompt. Type **your own answer** and **predict your partner's**. Clear matches are scored automatically. **The host decides close calls** ("Basketball court" vs "Hoop court"). | +1 per correct prediction, +1 if you gave the same answer |
 | **Tp** | **Telepathy** | A 3×3 well plate appears (emoji, colors, shapes, numbers or words). Without talking, both partners try to pick the same well. | +2 for the same well |
 | **Dc** | **Decision** | A situation with four options (A–D, or أ–د in Arabic). Choose what **you** would do and predict what **your partner** will choose. | +1 per correct prediction, +1 if you chose the same option |
+| **Wr** | **Would you rather** | Two hard options ("know a truth that hurts" or "believe a lie that comforts"). Choose one, and predict which your partner chose. | +1 per correct prediction, +1 if you chose the same |
 | **Pr** | **Priorities** | Four items to rank from 1 (top priority) to 4. Tap them into a numbered rack in order; nothing starts pre-ranked, so a match is never an accident. | +1 for each item you both put at the same rank (up to 4) |
+
+### Question themes
+
+The host picks which **themes** the questions come from (any combination). Every experiment has questions in every theme:
+
+| Theme | What it covers | Examples |
+| --- | --- | --- |
+| **Light** | Everyday, playful questions | "Your go-to comfort food?", "Live by the sea or in the mountains?" |
+| **Deep** | Philosophy, meaning, identity and values | "In one word, what makes a life well lived?", the trolley problem, "Be wise but unhappy, or happy but naïve?" |
+| **Bonds** | Relationships, trust and feelings | "What breaks trust fastest?", "Rank what is hardest to forgive" |
 
 The lab report turns each pair's score into a **compatibility index**: points earned out of points possible. The index is shown on a universal-indicator strip and classified as a bond:
 
@@ -51,7 +62,7 @@ npm start        # Express serves client/dist + Socket.io on one port (PORT env,
 ### Tests
 
 ```bash
-npm test -w server   # state machine (all four experiments), Arabic + English matching, content checks
+npm test -w server   # state machine (all five experiments), themes, Arabic + English matching, content checks
 ```
 
 ### Deploy to Render
@@ -75,7 +86,7 @@ Things to know:
 
 1. **Start a session.** You become the **host**.
 2. Players join with the code or link, then **start a pair** or **join an open seat**. Each pair is labelled with a chemical element in its flame-test color (Sodium, Copper, Lithium, …), and players can rename their pair. The host can **pair everyone randomly**, move players between pairs or remove them.
-3. The host sets the **test protocol**: which experiments to run (any combination), the number of rounds and each experiment's time limit. Then they press **Start testing**. Rounds cycle through the selected experiments.
+3. The host sets the **test protocol**: which experiments to run, which **question themes** to draw from (Light, Deep, Bonds, in any combination), the number of rounds and each experiment's time limit. Then they press **Start testing**. Rounds cycle through the selected experiments.
    - The host can play in a pair or stay out and run the session from a shared screen.
    - Incomplete pairs watch.
 4. A round ends when everyone has locked in, when the timer runs out, or when the host presses **Reveal now**. The host can also swap the prompt with **New prompt**.
@@ -118,7 +129,7 @@ chemistry-game/
 │   │   ├── sockets.js        # socket event → Room method wiring, per-player broadcasts
 │   │   ├── room.js           # ★ authoritative state machine (pairs, rounds, scoring)
 │   │   ├── matching.js       # fuzzy answer matching, English + Arabic
-│   │   └── content.js        # bilingual prompts, decisions, rankings, well plates
+│   │   └── content.js        # bilingual question bank, tagged by theme (light / deep / bonds)
 │   └── test/game.test.js
 └── client/
     ├── vite.config.js        # proxies /socket.io → :3001 in dev
@@ -139,6 +150,7 @@ chemistry-game/
             ├── Telepathy.jsx     # well plate pick + reveal
             ├── Decision.jsx      # A–D situation pick + reveal
             ├── Priority.jsx      # 1–4 ranking rack + side-by-side reveal
+            ├── Rather.jsx        # would-you-rather versus cards + reveal
             └── GameOver.jsx      # lab report / certificate
 ```
 
@@ -148,15 +160,16 @@ chemistry-game/
 waiting ──start──▶ question_active  (Sync)      ──┐
                    telepathy_active (Telepathy) ──┼─(all locked / timer / host)─▶ revealing ──next──▶ …
                    decision_active  (Decision)  ──┤
-                   priority_active  (Priorities)──┘
+                   priority_active  (Priorities)──┤
+                   rather_active    (Would you rather)┘
                                                           last round ──▶ game_over ──▶ waiting
 ```
 
-`revealing` is shared by all four experiments. `round.type` (`'sync'`, `'telepathy'`, `'decision'` or `'priority'`) tells the client which reveal screen to show.
+`revealing` is shared by all five experiments. `round.type` (`'sync'`, `'telepathy'`, `'decision'`, `'priority'` or `'rather'`) tells the client which reveal screen to show.
 
 ### Networking model
 
-- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit`, `priority:submit`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
+- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit` (also used by Would you rather), `priority:submit`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
 - Error `code`s are language-neutral and are translated on the client (`errors.*` in `i18n.jsx`).
 - Content is sent as `{ en, ar }` pairs, and each client shows its own language.
 - After each change, every player receives a **personalised snapshot** (`room:state`). While a round is active, other players' answers and picks are **left out** of the snapshot.
@@ -165,4 +178,4 @@ waiting ──start──▶ question_active  (Sync)      ──┐
 
 ### Adding content
 
-Prompts, decisions, rankings and well plates live in `server/src/content.js`, and every entry needs both `en` and `ar`; the tests check this. UI copy lives in `client/src/i18n.jsx`.
+The question bank lives in `server/src/content.js`. Every entry needs both `en` and `ar` and belongs to a theme (`light`, `deep` or `bonds`); the tests check this. UI copy lives in `client/src/i18n.jsx`.

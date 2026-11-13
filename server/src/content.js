@@ -2,7 +2,19 @@
  * Game content — every player-facing string is bilingual: { en, ar }.
  * The client renders whichever language each player has chosen, so a mixed
  * Arabic/English group sees the same prompt in their own language.
+ *
+ * Every question belongs to a THEME that the host selects in the lobby:
+ *   light — everyday, playful questions
+ *   deep  — philosophy, meaning, identity and values
+ *   bonds — relationships, trust and feelings
+ * Each round draws only from the selected themes (falling back to the full
+ * pool if an experiment has nothing in them).
+ *
+ * Sync prompts are phrased so the answer can be a word or a short phrase,
+ * which keeps answer matching meaningful.
  */
+
+export const THEMES = Object.freeze(['light', 'deep', 'bonds']);
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -15,23 +27,37 @@ export const shuffle = (arr) => {
   return a;
 };
 
-/** Draw an unused index from `list`, tracking used ones in `used` (resets when exhausted). */
-function drawIndex(list, used) {
-  if (used.size >= list.length) used.clear();
-  const available = list.map((_, i) => i).filter((i) => !used.has(i));
+/**
+ * Draw an unused index from `list`, restricted to the selected `themes`.
+ * `used` tracks indices already played; once every matching entry has been
+ * used, those are recycled. If no entry matches the themes, any entry is fine.
+ */
+function drawIndex(list, used, themes) {
+  let candidates = list.map((_, i) => i).filter((i) => !themes || themes.includes(list[i].theme));
+  if (!candidates.length) candidates = list.map((_, i) => i);
+  let available = candidates.filter((i) => !used.has(i));
+  if (!available.length) {
+    for (const i of candidates) used.delete(i);
+    available = candidates;
+  }
   const index = pick(available);
   used.add(index);
   return index;
 }
 
+/** Tag every entry of a list with a theme. */
+const themed = (theme, list) => list.map((entry) => ({ ...entry, theme }));
+
 /* ------------------------------------------------------------------ */
 /* Sync — answer for yourself, predict your partner                    */
-/* category keys are translated on the client: know | wave | blank     */
+/* `category` is a sub-label shown on the card (translated on client): */
+/*   light: know | wave | blank                                        */
+/*   deep:  self | meaning | values | blank      bonds: bond | blank   */
 /* ------------------------------------------------------------------ */
 
 const S = (category, en, ar) => ({ category, text: { en, ar } });
 
-export const SYNC_PROMPTS = [
+const LIGHT_SYNC = [
   S('know', "What's your ultimate comfort food?", 'ما الأكلة التي تريّحك مهما كان مزاجك؟'),
   S('know', 'Your go-to song to sing out loud?', 'أغنيتك المفضّلة للغناء بصوت عالٍ؟'),
   S('know', 'Dream vacation destination?', 'وجهة إجازة أحلامك؟'),
@@ -83,12 +109,81 @@ export const SYNC_PROMPTS = [
   S('blank', 'The best time of day is ___', 'أفضل وقت في اليوم هو ___'),
 ];
 
-export function drawSyncPrompt(used) {
-  return structuredClone(SYNC_PROMPTS[drawIndex(SYNC_PROMPTS, used)]);
+const DEEP_SYNC = [
+  // Inner self
+  S('self', 'In one word, who are you really?', 'بكلمة واحدة، من أنت حقًا؟'),
+  S('self', "What's your biggest fear about the future?", 'ما أكبر مخاوفك من المستقبل؟'),
+  S('self', 'What do you pretend not to care about?', 'ما الشيء الذي تتظاهر بأنك لا تهتم به؟'),
+  S('self', 'Which emotion do you hide the most?', 'أي شعور تخفيه أكثر من غيره؟'),
+  S('self', 'What part of yourself are you still learning to accept?', 'أي جزء من نفسك ما زلت تتعلّم تقبّله؟'),
+  S('self', 'What would surprise your younger self most about you today?', 'ما الذي سيفاجئ نسختك الصغيرة فيك اليوم؟'),
+  S('self', 'What do you need more of right now?', 'ما الذي تحتاج المزيد منه الآن؟'),
+  S('self', 'In one word, how do you want people to feel around you?', 'بكلمة واحدة، كيف تريد أن يشعر الناس حولك؟'),
+  S('self', 'What belief have you completely changed your mind about?', 'ما القناعة التي غيّرت رأيك فيها تمامًا؟'),
+  S('self', 'What makes you feel most alive?', 'ما الذي يجعلك تشعر بأنك حيّ فعلًا؟'),
+
+  // Meaning
+  S('meaning', 'In one word, what makes a life well lived?', 'بكلمة واحدة، ما الذي يجعل الحياة تستحق أن تُعاش؟'),
+  S('meaning', 'What is happiness, really?', 'ما هي السعادة حقًا؟'),
+  S('meaning', 'What do you want to be remembered for?', 'بماذا تحب أن يتذكرك الناس؟'),
+  S('meaning', 'What is the most valuable thing a person can have?', 'ما أثمن شيء يمكن أن يملكه الإنسان؟'),
+  S('meaning', 'What is the opposite of love?', 'ما عكس الحب؟'),
+  S('meaning', 'What is one thing money can never buy?', 'ما الشيء الذي لا يستطيع المال شراءه أبدًا؟'),
+  S('meaning', 'What is pain for?', 'ما الغاية من الألم؟'),
+  S('meaning', 'What are most people really searching for?', 'ما الذي يبحث عنه معظم الناس فعلًا؟'),
+  S('meaning', 'If you could know the answer to one question, what would you ask?', 'لو أمكنك معرفة إجابة سؤال واحد، ماذا ستسأل؟'),
+  S('meaning', 'In one word, what is time?', 'بكلمة واحدة، ما هو الوقت؟'),
+
+  // Values
+  S('values', 'What value would you never compromise on?', 'ما القيمة التي لا تتنازل عنها أبدًا؟'),
+  S('values', 'What trait do you admire most in others?', 'ما الصفة التي تعجبك أكثر في الآخرين؟'),
+  S('values', 'What is the hardest thing to forgive?', 'ما أصعب شيء يمكن مسامحته؟'),
+  S('values', 'In one word, what does success mean to you?', 'بكلمة واحدة، ماذا يعني لك النجاح؟'),
+  S('values', 'What lie do people tell themselves most often?', 'ما الكذبة التي يكذبها الناس على أنفسهم كثيرًا؟'),
+  S('values', 'What makes someone trustworthy?', 'ما الذي يجعل الشخص جديرًا بالثقة؟'),
+  S('values', 'In one word, what is courage?', 'بكلمة واحدة، ما هي الشجاعة؟'),
+  S('values', 'What do you think is wrong with the world today?', 'ما الخلل الأكبر في العالم اليوم برأيك؟'),
+
+  // Bonds
+  S('bond', 'How can you tell someone truly cares about you?', 'كيف تعرف أن شخصًا يهتم بك فعلًا؟'),
+  S('bond', 'How do you show love without saying it?', 'كيف تعبّر عن محبتك دون أن تقولها؟'),
+  S('bond', 'What do you need most from the people closest to you?', 'ما الذي تحتاجه أكثر من أقرب الناس إليك؟'),
+  S('bond', 'What breaks trust fastest?', 'ما الذي يكسر الثقة أسرع من أي شيء؟'),
+  S('bond', 'What makes a friendship last?', 'ما الذي يجعل الصداقة تدوم؟'),
+  S('bond', 'What small thing means a lot to you?', 'ما الشيء الصغير الذي يعني لك الكثير؟'),
+  S('bond', 'When do you feel most understood?', 'متى تشعر بأنك مفهوم أكثر؟'),
+  S('bond', 'What do you find hardest to ask for?', 'ما أصعب شيء عليك أن تطلبه من الآخرين؟'),
+
+  // Fill in the blank
+  S('blank', 'The world would be kinder if everyone ___', 'سيكون العالم ألطف لو أن الجميع ___'),
+  S('blank', 'I feel most at peace when ___', 'أشعر بالسلام أكثر عندما ___'),
+  S('blank', 'The best advice I ever got was ___', 'أفضل نصيحة تلقيتها كانت ___'),
+  S('blank', "I'm still learning how to ___", 'ما زلت أتعلّم كيف ___'),
+  S('blank', 'Growing up means ___', 'أن تكبر يعني ___'),
+  S('blank', 'Home is ___', 'البيت هو ___'),
+  S('blank', 'Real friendship is ___', 'الصداقة الحقيقية هي ___'),
+  S('blank', 'I wish I could tell my younger self ___', 'أتمنى لو أقول لنفسي الصغيرة ___'),
+  S('blank', "The thing I'm most grateful for is ___", 'أكثر ما أشعر بالامتنان له هو ___'),
+  S('blank', 'Regret teaches us ___', 'الندم يعلّمنا ___'),
+];
+
+/** Deep-pack fill-ins that are really about relationships. */
+const BOND_BLANKS = new Set(['Home is ___', 'Real friendship is ___']);
+
+export const SYNC_PROMPTS = [
+  ...themed('light', LIGHT_SYNC),
+  ...DEEP_SYNC.map((p) => ({
+    ...p,
+    theme: p.category === 'bond' || BOND_BLANKS.has(p.text.en) ? 'bonds' : 'deep',
+  })),
+];
+
+export function drawSyncPrompt(used, themes) {
+  return structuredClone(SYNC_PROMPTS[drawIndex(SYNC_PROMPTS, used, themes)]);
 }
 
 /* ------------------------------------------------------------------ */
-/* Decision — a situation with four options                            */
+/* Decision — a situation (light) or dilemma (deep / bonds), 4 options */
 /* ------------------------------------------------------------------ */
 
 const D = (en, ar, choices) => ({
@@ -97,7 +192,7 @@ const D = (en, ar, choices) => ({
   choices: choices.map(([cen, car]) => ({ en: cen, ar: car })),
 });
 
-export const DECISIONS = [
+const LIGHT_DECISIONS = [
   D('You find a wallet full of cash with no ID inside.', 'وجدت محفظة مليئة بالنقود بدون أي إثبات هوية.', [
     ['Hand it to the police', 'أسلّمها للشرطة'],
     ['Post about it online to find the owner', 'أنشر عنها في الإنترنت لأجد صاحبها'],
@@ -232,8 +327,226 @@ export const DECISIONS = [
   ]),
 ];
 
-export function drawDecision(used) {
-  return structuredClone(DECISIONS[drawIndex(DECISIONS, used)]);
+const DEEP_DECISIONS = [
+  D('A runaway train will hit five people unless you pull a lever that sends it toward one person.', 'قطار خارج عن السيطرة سيصدم خمسة أشخاص، إلا إذا سحبت ذراعًا يحوّله نحو شخص واحد.', [
+    ['Pull the lever', 'أسحب الذراع'],
+    ['Don’t touch it', 'لا ألمسه'],
+    ['Shout to warn them', 'أصرخ لتحذيرهم'],
+    ['Freeze', 'أتجمّد في مكاني'],
+  ]),
+  D('A machine can give you a lifetime of happiness, but none of it would be real.', 'آلة يمكنها أن تمنحك سعادة مدى الحياة، لكن لا شيء منها سيكون حقيقيًا.', [
+    ['Plug in', 'أدخل'],
+    ['Refuse', 'أرفض'],
+    ['Try it for one day', 'أجرّبها ليوم واحد'],
+    ['Only when I’m old', 'فقط عندما أكبر في السن'],
+  ]),
+  D('You learn a close friend lied to you to protect your feelings.', 'اكتشفت أن صديقًا مقربًا كذب عليك ليحمي مشاعرك.', [
+    ['Thank them', 'أشكره'],
+    ['Confront them', 'أواجهه'],
+    ['Let it go quietly', 'أتجاوز الأمر بصمت'],
+    ['Trust them a little less', 'أثق به أقل قليلًا'],
+  ]),
+  D('You can learn one truth about your future.', 'يمكنك معرفة حقيقة واحدة عن مستقبلك.', [
+    ['When I’ll be happiest', 'متى سأكون في أسعد حالاتي'],
+    ['What I’ll regret most', 'ما الذي سأندم عليه أكثر'],
+    ['Who will stay in my life', 'من سيبقى في حياتي'],
+    ['Whether I’ll reach my dream', 'هل سأحقق حلمي'],
+  ]),
+  D('You’re offered your dream life, but you must move far from everyone you know.', 'عُرضت عليك حياة أحلامك، لكن عليك الابتعاد عن كل من تعرفهم.', [
+    ['Go', 'أذهب'],
+    ['Stay', 'أبقى'],
+    ['Try it for a year first', 'أجرّب سنة أولًا'],
+    ['Take one person with me', 'آخذ شخصًا واحدًا معي'],
+  ]),
+  D('You can erase one painful memory forever.', 'يمكنك محو ذكرى مؤلمة واحدة إلى الأبد.', [
+    ['Erase it', 'أمحوها'],
+    ['Keep it — it shaped me', 'أحتفظ بها، فقد صنعتني'],
+    ['Erase it but keep the lesson', 'أمحوها وأحتفظ بالدرس'],
+    ['Give the chance to someone else', 'أعطي الفرصة لشخص آخر'],
+  ]),
+  D('Your best friend asks your honest opinion on a decision you think is a mistake.', 'صديقك المقرّب يسألك عن رأيك الصريح في قرار تراه خطأ.', [
+    ['Tell the full truth', 'أقول الحقيقة كاملة'],
+    ['Support them anyway', 'أدعمه على أي حال'],
+    ['Ask questions that guide them', 'أطرح أسئلة توجّهه'],
+    ['Stay neutral', 'أبقى محايدًا'],
+  ]),
+  D('You can fix one thing in the world.', 'يمكنك إصلاح شيء واحد في العالم.', [
+    ['End hunger', 'إنهاء الجوع'],
+    ['End war', 'إنهاء الحروب'],
+    ['Cure all disease', 'علاج كل الأمراض'],
+    ['End loneliness', 'إنهاء الوحدة'],
+  ]),
+  D('You realise you’ve been wrong about something important for years.', 'أدركت أنك كنت مخطئًا في أمر مهم لسنوات.', [
+    ['Admit it openly', 'أعترف بذلك علنًا'],
+    ['Change quietly', 'أتغيّر بهدوء'],
+    ['Look into it more first', 'أبحث أكثر أولًا'],
+    ['Keep my old view', 'أتمسّك برأيي القديم'],
+  ]),
+  D('You’re praised for work a colleague actually did.', 'تلقيت مديحًا على عمل قام به زميلك في الحقيقة.', [
+    ['Correct it right away', 'أصحّح الأمر فورًا'],
+    ['Tell my colleague privately', 'أخبر زميلي على انفراد'],
+    ['Credit them next time', 'أنسب الفضل له في المرة القادمة'],
+    ['Say nothing', 'لا أقول شيئًا'],
+  ]),
+  D('You have one year left to live.', 'تبقّت لك سنة واحدة في الحياة.', [
+    ['Travel the world', 'أسافر حول العالم'],
+    ['Spend it with family', 'أقضيها مع عائلتي'],
+    ['Create something that lasts', 'أصنع شيئًا يبقى بعدي'],
+    ['Live as I do now', 'أعيش كما أعيش الآن'],
+  ]),
+  D('Someone who hurt you deeply now sincerely apologises.', 'شخص جرحك بعمق يعتذر لك الآن بصدق.', [
+    ['Forgive fully', 'أسامح تمامًا'],
+    ['Forgive but keep my distance', 'أسامح مع الحفاظ على مسافة'],
+    ['I need more time', 'أحتاج وقتًا أكثر'],
+    ['I’m not ready to forgive', 'لست مستعدًا للمسامحة'],
+  ]),
+  D('Once, you can see exactly how other people see you.', 'مرة واحدة فقط، يمكنك أن ترى كيف يراك الآخرون بالضبط.', [
+    ['Look', 'أنظر'],
+    ['Never look', 'لا أنظر أبدًا'],
+    ['Only the people closest to me', 'فقط من هم أقرب الناس إليّ'],
+    ['Only strangers', 'فقط الغرباء'],
+  ]),
+  D('You find the private journal of someone you love.', 'وجدت المذكرات الخاصة لشخص تحبه.', [
+    ['Read it', 'أقرؤها'],
+    ['Return it unread', 'أعيدها دون أن أقرأها'],
+    ['Read just one page', 'أقرأ صفحة واحدة فقط'],
+    ['Tell them I found it', 'أخبره أنني وجدتها'],
+  ]),
+  D('You can restart your life at 18, keeping everything you know now.', 'يمكنك أن تبدأ حياتك من جديد بعمر 18 مع كل ما تعرفه الآن.', [
+    ['Restart', 'أبدأ من جديد'],
+    ['Stay where I am', 'أبقى حيث أنا'],
+    ['Only if my loved ones come too', 'فقط إن جاء أحبّائي معي'],
+    ['Ask someone I love first', 'أستشير شخصًا أحبه أولًا'],
+  ]),
+  D('You learn a secret that would hurt a friend if they knew.', 'عرفت سرًا سيؤذي صديقك لو علم به.', [
+    ['Tell them', 'أخبره'],
+    ['Keep it', 'أكتمه'],
+    ['Hint at it', 'ألمّح له'],
+    ['Let someone else tell them', 'أترك غيري يخبره'],
+  ]),
+  D('You can live forever, but everyone you know will not.', 'يمكنك أن تعيش للأبد، لكن كل من تعرفهم لن يعيشوا مثلك.', [
+    ['Accept', 'أقبل'],
+    ['Refuse', 'أرفض'],
+    ['Only if one person can join me', 'فقط إن أمكن لشخص واحد أن ينضم إليّ'],
+    ['Accept, then find a way out', 'أقبل ثم أبحث عن مخرج'],
+  ]),
+  D('A stranger’s small mistake will cost them their job unless you take the blame.', 'خطأ صغير لشخص غريب سيكلّفه وظيفته، إلا إذا تحمّلت أنت اللوم.', [
+    ['Take the blame', 'أتحمّل اللوم'],
+    ['Stay out of it', 'أبقى بعيدًا'],
+    ['Tell the truth gently', 'أقول الحقيقة بلطف'],
+    ['Quietly help them fix it', 'أساعده بهدوء على إصلاحه'],
+  ]),
+];
+
+/** Dilemmas about the people in your life rather than abstract ethics. */
+const BOND_DECISION_PREFIXES = [
+  'You learn a close friend lied',
+  'Your best friend asks',
+  'Someone who hurt you',
+  'You find the private journal',
+  'You learn a secret',
+  'Once, you can see exactly how',
+];
+
+export const DECISIONS = [
+  ...themed('light', LIGHT_DECISIONS),
+  ...DEEP_DECISIONS.map((d) => ({
+    ...d,
+    category: 'dilemma',
+    theme: BOND_DECISION_PREFIXES.some((p) => d.text.en.startsWith(p)) ? 'bonds' : 'deep',
+  })),
+];
+
+export function drawDecision(used, themes) {
+  return structuredClone(DECISIONS[drawIndex(DECISIONS, used, themes)]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Would you rather — two hard options                                 */
+/* ------------------------------------------------------------------ */
+
+const WYR_TEXT = { en: 'Would you rather…', ar: 'ماذا تفضّل؟' };
+const R = (theme, [aen, aar], [ben, bar]) => ({
+  category: 'rather',
+  theme,
+  text: WYR_TEXT,
+  choices: [
+    { en: aen, ar: aar },
+    { en: ben, ar: bar },
+  ],
+});
+
+const LIGHT_RATHERS = [
+  R('light', ['Always be 10 minutes late', 'تتأخر دائمًا 10 دقائق'], ['Always be 20 minutes early', 'تصل دائمًا قبل الموعد بـ 20 دقيقة']),
+  R('light', ['Give up coffee forever', 'تتخلى عن القهوة للأبد'], ['Give up sweets forever', 'تتخلى عن الحلويات للأبد']),
+  R('light', ['Live by the sea', 'تعيش بجانب البحر'], ['Live in the mountains', 'تعيش في الجبال']),
+  R('light', ['Be able to fly', 'تستطيع الطيران'], ['Be able to turn invisible', 'تستطيع الاختفاء']),
+  R('light', ['Have a rewind button for your life', 'زر ترجيع لحياتك'], ['Have a pause button for your life', 'زر إيقاف مؤقت لحياتك']),
+  R('light', ['Never use social media again', 'لا تستخدم التواصل الاجتماعي مجددًا'], ['Never watch a series again', 'لا تشاهد مسلسلًا مجددًا']),
+  R('light', ['Speak every language', 'تتحدث كل اللغات'], ['Talk to animals', 'تتحدث مع الحيوانات']),
+  R('light', ['Eat your favorite meal every day', 'تأكل وجبتك المفضلة كل يوم'], ['Never eat it again', 'لا تأكلها مرة أخرى أبدًا']),
+  R('light', ['Have a personal chef', 'طاهٍ شخصي'], ['Have a personal driver', 'سائق شخصي']),
+  R('light', ['Lose your phone for a month', 'تفقد جوالك لمدة شهر'], ['Lose your car for a month', 'تفقد سيارتك لمدة شهر']),
+  R('light', ['Always feel too hot', 'تشعر دائمًا بالحر'], ['Always feel too cold', 'تشعر دائمًا بالبرد']),
+  R('light', ['Be the funniest person in the room', 'تكون الأظرف في المكان'], ['Be the best storyteller in the room', 'تكون أفضل راوٍ للقصص في المكان']),
+  R('light', ['Travel the world for a year', 'تسافر حول العالم لمدة سنة'], ['Get your dream house', 'تحصل على بيت أحلامك']),
+  R('light', ['Only ever whisper', 'لا تتكلم إلا همسًا'], ['Only ever shout', 'لا تتكلم إلا صراخًا']),
+  R('light', ['Read every book ever written', 'تقرأ كل كتاب كُتب'], ['Watch every film ever made', 'تشاهد كل فيلم صُنع']),
+];
+
+/** Would-you-rathers about love, friendship and other people. */
+const BOND_RATHERS = new Set([
+  'Be loved but not respected',
+  'Be famous and lonely',
+  'Forget who you are',
+  'Have one true friend',
+  'Reach your dream alone',
+  'Be understood by everyone',
+  'Never be able to say goodbye',
+  'Give up all your achievements',
+]);
+
+const DEEP_RATHERS = [
+  R('deep', ['Know when you will die', 'تعرف متى ستموت'], ['Know how you will die', 'تعرف كيف ستموت']),
+  R('deep', ['Relive the same year forever', 'تعيش السنة نفسها إلى الأبد'], ['Skip ahead ten years', 'تقفز عشر سنوات إلى الأمام']),
+  R('deep', ['Lose all your memories', 'تفقد كل ذكرياتك'], ['Never make a new memory', 'لا تكوّن أي ذكرى جديدة']),
+  R('deep', ['Never be able to lie', 'لا تستطيع الكذب أبدًا'], ['Never know when someone lies to you', 'لا تعرف أبدًا متى يكذب عليك أحد']),
+  R('deep', ['Be loved but not respected', 'تكون محبوبًا بلا احترام'], ['Be respected but not loved', 'تكون محترمًا بلا محبة']),
+  R('deep', ['Have more time', 'تملك وقتًا أكثر'], ['Have more money', 'تملك مالًا أكثر']),
+  R('deep', ['Be famous and lonely', 'تكون مشهورًا ووحيدًا'], ['Be unknown and deeply loved', 'تكون مجهولًا ومحبوبًا بعمق']),
+  R('deep', ['Know every truth about yourself', 'تعرف كل الحقيقة عن نفسك'], ['Know every truth about the universe', 'تعرف كل الحقيقة عن الكون']),
+  R('deep', ['Change one decision in your past', 'تغيّر قرارًا واحدًا في ماضيك'], ['See one moment of your future', 'ترى لحظة واحدة من مستقبلك']),
+  R('deep', ['Live 200 years in average health', 'تعيش 200 سنة بصحة متوسطة'], ['Live 60 years in perfect health', 'تعيش 60 سنة بصحة ممتازة']),
+  R('deep', ['Be the smartest person in every room', 'تكون الأذكى في كل مكان'], ['Be the kindest person in every room', 'تكون الألطف في كل مكان']),
+  R('deep', ['Have everyone hear your thoughts', 'يسمع الجميع أفكارك'], ['Hear everyone’s thoughts', 'تسمع أفكار الجميع']),
+  R('deep', ['Never feel sadness again', 'لا تشعر بالحزن مجددًا'], ['Never feel fear again', 'لا تشعر بالخوف مجددًا']),
+  R('deep', ['Forget who you are', 'تنسى من أنت'], ['Forget everyone you love', 'تنسى كل من تحب']),
+  R('deep', ['A job you love that pays little', 'وظيفة تحبها براتب قليل'], ['A job you dislike that pays a lot', 'وظيفة لا تحبها براتب كبير']),
+  R('deep', ['Have one true friend', 'صديق حقيقي واحد'], ['Have a hundred good friends', 'مئة صديق جيد']),
+  R('deep', ['Know a truth that hurts', 'تعرف حقيقة تؤلمك'], ['Believe a lie that comforts you', 'تصدّق كذبة تريحك']),
+  R('deep', ['Be remembered for a mistake', 'تُذكر بسبب خطأ'], ['Be completely forgotten', 'تُنسى تمامًا']),
+  R('deep', ['Live in any era of the past', 'تعيش في أي عصر من الماضي'], ['Live 100 years in the future', 'تعيش بعد 100 سنة في المستقبل']),
+  R('deep', ['Have a perfect memory', 'تملك ذاكرة مثالية'], ['Have perfect intuition', 'تملك حدسًا لا يخطئ']),
+  R('deep', ['Always say exactly what you think', 'تقول دائمًا ما تفكر فيه بالضبط'], ['Never share your opinion again', 'لا تشارك رأيك أبدًا']),
+  R('deep', ['Reach your dream alone', 'تحقق حلمك وحيدًا'], ['Fail together with the people you love', 'تفشل مع من تحب']),
+  R('deep', ['Restart life at 10 with your current mind', 'تبدأ حياتك من جديد بعمر 10 بعقلك الحالي'], ['Continue from today', 'تكمل من اليوم']),
+  R('deep', ['Be wise but unhappy', 'تكون حكيمًا وغير سعيد'], ['Be happy but naïve', 'تكون سعيدًا وساذجًا']),
+  R('deep', ['Give up all your achievements', 'تتخلى عن كل إنجازاتك'], ['Give up all your memories with friends', 'تتخلى عن كل ذكرياتك مع أصدقائك']),
+  R('deep', ['Always know the right thing to do', 'تعرف دائمًا الصواب'], ['Always have the courage to do it', 'تملك دائمًا الشجاعة لفعله']),
+  R('deep', ['Never be able to say goodbye', 'لا تستطيع الوداع أبدًا'], ['Never be able to say sorry', 'لا تستطيع الاعتذار أبدًا']),
+  R('deep', ['Be understood by everyone', 'يفهمك الجميع'], ['Understand everyone', 'تفهم الجميع']),
+];
+
+export const RATHERS = [
+  ...LIGHT_RATHERS,
+  ...DEEP_RATHERS.map((r) => ({
+    ...r,
+    theme: BOND_RATHERS.has(r.choices[0].en) ? 'bonds' : 'deep',
+  })),
+];
+
+export function drawRather(used, themes) {
+  return structuredClone(RATHERS[drawIndex(RATHERS, used, themes)]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -246,7 +559,7 @@ const P = (en, ar, items) => ({
   items: items.map(([ien, iar]) => ({ en: ien, ar: iar })),
 });
 
-export const PRIORITIES = [
+const LIGHT_PRIORITIES = [
   P('Rank what matters most on a weekend trip', 'رتّب الأهم في رحلة نهاية الأسبوع', [
     ['Good food', 'أكل لذيذ'], ['A comfortable stay', 'سكن مريح'], ['Activities', 'أنشطة'], ['Rest', 'راحة'],
   ]),
@@ -303,8 +616,72 @@ export const PRIORITIES = [
   ]),
 ];
 
-export function drawPriority(used) {
-  return structuredClone(PRIORITIES[drawIndex(PRIORITIES, used)]);
+const DEEP_PRIORITIES = [
+  P('Rank what makes a life meaningful', 'رتّب ما يجعل الحياة ذات معنى', [
+    ['Love', 'الحب'], ['Purpose', 'الغاية'], ['Freedom', 'الحرية'], ['Inner peace', 'السلام الداخلي'],
+  ]),
+  P('Rank these values', 'رتّب هذه القيم', [
+    ['Honesty', 'الصدق'], ['Kindness', 'اللطف'], ['Loyalty', 'الوفاء'], ['Courage', 'الشجاعة'],
+  ]),
+  P("Rank what you'd protect first", 'رتّب ما ستحميه أولًا', [
+    ['Your health', 'صحتك'], ['Your reputation', 'سمعتك'], ['Your relationships', 'علاقاتك'], ['Your dreams', 'أحلامك'],
+  ]),
+  P('Rank what matters most in a life partner', 'رتّب الأهم في شريك الحياة', [
+    ['Understanding', 'التفهّم'], ['Respect', 'الاحترام'], ['Humor', 'خفة الدم'], ['Ambition', 'الطموح'],
+  ]),
+  P('Rank what scares you most', 'رتّب أكثر ما يخيفك', [
+    ['Being forgotten', 'أن تُنسى'], ['Failing', 'الفشل'], ['Losing someone', 'فقدان شخص عزيز'], ['Wasting my life', 'أن تضيع حياتي'],
+  ]),
+  P("Rank what you'd want more of", 'رتّب ما تريد المزيد منه', [
+    ['Time', 'الوقت'], ['Wisdom', 'الحكمة'], ['Health', 'الصحة'], ['Closeness to people', 'القرب من الناس'],
+  ]),
+  P('Rank the sources of happiness', 'رتّب مصادر السعادة', [
+    ['Achievement', 'الإنجاز'], ['Family', 'العائلة'], ['Faith', 'الإيمان'], ['New experiences', 'التجارب الجديدة'],
+  ]),
+  P('Rank what defines who you are', 'رتّب ما يحدّد من أنت', [
+    ['My choices', 'اختياراتي'], ['My memories', 'ذكرياتي'], ['My values', 'قيمي'], ['My relationships', 'علاقاتي'],
+  ]),
+  P('Rank what is hardest to forgive', 'رتّب الأصعب في المسامحة', [
+    ['Betrayal', 'الخيانة'], ['Lies', 'الكذب'], ['Neglect', 'الإهمال'], ['Disrespect', 'قلة الاحترام'],
+  ]),
+  P("Rank what you'd give up last", 'رتّب ما ستتخلى عنه أخيرًا', [
+    ['Freedom', 'الحرية'], ['Comfort', 'الراحة'], ['Pride', 'الكبرياء'], ['Privacy', 'الخصوصية'],
+  ]),
+  P('Rank what makes a good leader', 'رتّب ما يصنع القائد الجيد', [
+    ['Vision', 'الرؤية'], ['Fairness', 'العدل'], ['Humility', 'التواضع'], ['Decisiveness', 'الحزم'],
+  ]),
+  P('Rank what a child needs most', 'رتّب ما يحتاجه الطفل أكثر', [
+    ['Love', 'الحب'], ['Discipline', 'الانضباط'], ['Freedom', 'الحرية'], ['A good example', 'القدوة'],
+  ]),
+  P('Rank what makes a friendship deep', 'رتّب ما يجعل الصداقة عميقة', [
+    ['Shared history', 'الذكريات المشتركة'], ['Honesty', 'الصراحة'], ['Showing up', 'الحضور وقت الحاجة'], ['Laughing together', 'الضحك معًا'],
+  ]),
+  P('Rank what you’d want people to say about you', 'رتّب ما تحب أن يقوله الناس عنك', [
+    ['They were kind', 'كان لطيفًا'], ['They were brave', 'كان شجاعًا'], ['They were wise', 'كان حكيمًا'], ['They were fun', 'كان ممتعًا'],
+  ]),
+  P('Rank what makes a home', 'رتّب ما يصنع البيت', [
+    ['The people', 'الناس فيه'], ['The memories', 'الذكريات'], ['The place itself', 'المكان نفسه'], ['The feeling of safety', 'الشعور بالأمان'],
+  ]),
+];
+
+/** Value rankings that are about relationships. */
+const BOND_PRIORITY_PREFIXES = [
+  'Rank what matters most in a life partner',
+  'Rank what is hardest to forgive',
+  'Rank what makes a friendship deep',
+  'Rank what makes a home',
+];
+
+export const PRIORITIES = [
+  ...themed('light', LIGHT_PRIORITIES),
+  ...DEEP_PRIORITIES.map((p) => ({
+    ...p,
+    theme: BOND_PRIORITY_PREFIXES.some((x) => p.text.en.startsWith(x)) ? 'bonds' : 'deep',
+  })),
+];
+
+export function drawPriority(used, themes) {
+  return structuredClone(PRIORITIES[drawIndex(PRIORITIES, used, themes)]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -328,7 +705,17 @@ const emojiSet = (name, items, prompts) => ({
   make: () => shuffle(items).slice(0, 9).map((e) => ({ display: e })),
 });
 
-const TELEPATHY_SETS = [
+const wordSet = (name, words, prompts) => ({
+  name,
+  kind: 'word',
+  prompts,
+  make: () =>
+    shuffle(words)
+      .slice(0, 9)
+      .map((w) => ({ display: w })),
+});
+
+const LIGHT_TELEPATHY = [
   emojiSet(
     T('Late-night snacks', 'وجبات خفيفة'),
     ['🍕', '🍣', '🌮', '🍔', '🍩', '🍜', '🥐', '🍓', '🧀', '🍫', '🥑', '🍿', '🍪', '🥨', '🍉', '🌯'],
@@ -451,10 +838,45 @@ const TELEPATHY_SETS = [
   },
 ];
 
-/** Builds a fresh 3×3 telepathy grid, avoiding recently-used sets. */
-export function buildTelepathyGrid(used) {
-  const set = TELEPATHY_SETS[drawIndex(TELEPATHY_SETS, used)];
-  const text = Math.random() < 0.65 ? pick(set.prompts) : pick(GENERIC_TELEPATHY_PROMPTS);
+const THOUGHTFUL_TELEPATHY = [
+  wordSet(
+    T('Big ideas', 'أفكار كبرى'),
+    [
+      T('Freedom', 'حرية'), T('Truth', 'حقيقة'), T('Time', 'وقت'), T('Love', 'حب'),
+      T('Home', 'وطن'), T('Silence', 'صمت'), T('Hope', 'أمل'), T('Fate', 'قدر'),
+      T('Memory', 'ذاكرة'), T('Change', 'تغيير'), T('Light', 'نور'), T('Soul', 'روح'),
+      T('Faith', 'إيمان'), T('Journey', 'رحلة'), T('Peace', 'سلام'), T('Wisdom', 'حكمة'),
+    ],
+    [
+      T('Pick what your relationship is built on', 'اختر ما تقوم عليه علاقتكما'),
+      T('Pick the word that matters most to your partner', 'اختر الكلمة الأهم عند شريكك'),
+      T('Pick what you are searching for', 'اختر ما تبحث عنه'),
+    ],
+  ),
+  wordSet(
+    T('Feelings', 'مشاعر'),
+    [
+      T('Longing', 'حنين'), T('Calm', 'هدوء'), T('Wonder', 'دهشة'), T('Pride', 'فخر'),
+      T('Gratitude', 'امتنان'), T('Doubt', 'شك'), T('Joy', 'فرح'), T('Regret', 'ندم'),
+      T('Relief', 'ارتياح'), T('Courage', 'شجاعة'), T('Loneliness', 'وحدة'), T('Belonging', 'انتماء'),
+    ],
+    [
+      T('Pick the feeling your partner knows best', 'اختر الشعور الذي يعرفه شريكك أكثر'),
+      T('Pick how this year has felt', 'اختر كيف كانت هذه السنة'),
+    ],
+  ),
+];
+
+const TELEPATHY_SETS = [
+  ...themed('light', LIGHT_TELEPATHY),
+  { ...THOUGHTFUL_TELEPATHY[0], theme: 'deep' }, // Big ideas
+  { ...THOUGHTFUL_TELEPATHY[1], theme: 'bonds' }, // Feelings
+];
+
+/** Builds a fresh 3×3 telepathy grid from the selected themes, avoiding recently-used sets. */
+export function buildTelepathyGrid(used, themes) {
+  const set = TELEPATHY_SETS[drawIndex(TELEPATHY_SETS, used, themes)];
+  const text = Math.random() < 0.7 ? pick(set.prompts) : pick(GENERIC_TELEPATHY_PROMPTS);
   return {
     prompt: { category: 'telepathy', setName: set.name, text },
     grid: { kind: set.kind, cols: 3, items: set.make() },
@@ -472,3 +894,4 @@ export const AVATARS = [
   '🦊', '🐼', '🐙', '🦄', '🐢', '🦁', '🐧', '🦥', '🐝', '🦩', '🐳', '🦔',
   '🐸', '🦉', '🐨', '🐪', '🐯', '🐰', '🦋', '🐶', '🐱', '🐻', '🦦', '🐲',
 ];
+

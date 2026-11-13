@@ -11,6 +11,7 @@
  *   telepathy_active  — Telepathy trial: silently pick a well on the plate
  *   decision_active   — Decision trial: pick A–D for a situation + predict partner
  *   priority_active   — Priorities trial: rank four items 1–4
+ *   rather_active     — Would you rather: pick one of two hard options + predict partner
  *   revealing         — results of the current trial (any type); in Sync the
  *                       host can override matches here
  *   game_over         — final lab report
@@ -19,7 +20,17 @@
  * (see client/src/i18n.jsx → errors.*), so the server stays language-neutral.
  */
 
-import { AVATARS, ELEMENT_COUNT, buildTelepathyGrid, drawDecision, drawPriority, drawSyncPrompt, shuffle } from './content.js';
+import {
+  AVATARS,
+  ELEMENT_COUNT,
+  THEMES,
+  buildTelepathyGrid,
+  drawDecision,
+  drawPriority,
+  drawRather,
+  drawSyncPrompt,
+  shuffle,
+} from './content.js';
 import { judge } from './matching.js';
 
 export class GameError extends Error {
@@ -35,6 +46,7 @@ export const STATES = Object.freeze({
   TELEPATHY_ACTIVE: 'telepathy_active',
   DECISION_ACTIVE: 'decision_active',
   PRIORITY_ACTIVE: 'priority_active',
+  RATHER_ACTIVE: 'rather_active',
   REVEALING: 'revealing',
   GAME_OVER: 'game_over',
 });
@@ -44,20 +56,25 @@ const ACTIVE_STATES = new Set([
   STATES.TELEPATHY_ACTIVE,
   STATES.DECISION_ACTIVE,
   STATES.PRIORITY_ACTIVE,
+  STATES.RATHER_ACTIVE,
 ]);
 const STATE_FOR_TYPE = {
   sync: STATES.QUESTION_ACTIVE,
   telepathy: STATES.TELEPATHY_ACTIVE,
   decision: STATES.DECISION_ACTIVE,
   priority: STATES.PRIORITY_ACTIVE,
+  rather: STATES.RATHER_ACTIVE,
 };
 
-export const TESTS = Object.freeze(['sync', 'telepathy', 'decision', 'priority']);
+/** Experiments where each player picks an option for themselves + predicts their partner. */
+const CHOICE_TYPES = new Set(['decision', 'rather']);
+
+export const TESTS = Object.freeze(['sync', 'telepathy', 'decision', 'priority', 'rather']);
 
 export const POINTS = Object.freeze({
-  prediction: 1, // Sync + Decision: each correct prediction of your partner
+  prediction: 1, // Sync, Decision, Would you rather: each correct prediction of your partner
   jinx: 1, // Sync: both partners gave the same answer
-  sameChoice: 1, // Decision: both partners chose the same option
+  sameChoice: 1, // Decision, Would you rather: both partners chose the same option
   telepathy: 2, // Telepathy: both picked the same well
   sameRank: 1, // Priorities: each item both partners put at the same rank
 });
@@ -68,6 +85,7 @@ const SETTING_OPTIONS = {
   telepathySeconds: [8, 10, 15, 20, 30],
   decisionSeconds: [15, 20, 30, 45, 60],
   prioritySeconds: [30, 45, 60, 90],
+  ratherSeconds: [15, 20, 30, 45],
 };
 
 const LIMITS = { name: 16, teamName: 24, answer: 60, players: 24 };
@@ -98,17 +116,19 @@ export class Room {
     this.state = STATES.WAITING;
     this.settings = {
       tests: [...TESTS],
+      themes: [...THEMES], // question themes: light | deep | bonds
       rounds: 6,
       questionSeconds: 60,
       telepathySeconds: 15,
       decisionSeconds: 30,
       prioritySeconds: 45,
+      ratherSeconds: 20,
     };
     this.plan = [];
     this.roundIndex = 0;
     this.round = null;
     this.history = [];
-    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set(), priority: new Set() };
+    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set(), priority: new Set(), rather: new Set() };
     this.teamCounter = 0;
     this.timer = null;
     this.hostTimer = null;
@@ -356,6 +376,11 @@ export class Room {
       if (!tests.length) throw new GameError('need_one_test');
       this.settings.tests = tests;
     }
+    if ('themes' in patch) {
+      const themes = Array.isArray(patch.themes) ? THEMES.filter((t) => patch.themes.includes(t)) : [];
+      if (!themes.length) throw new GameError('need_one_theme');
+      this.settings.themes = themes;
+    }
     for (const [key, options] of Object.entries(SETTING_OPTIONS)) {
       if (key in patch) {
         if (!options.includes(patch[key])) throw new GameError('invalid_setting');
@@ -389,6 +414,7 @@ export class Room {
       telepathy: this.settings.telepathySeconds,
       decision: this.settings.decisionSeconds,
       priority: this.settings.prioritySeconds,
+      rather: this.settings.ratherSeconds,
     }[type];
     const round = {
       number: this.roundIndex + 1,
@@ -398,21 +424,23 @@ export class Room {
       deadline: Date.now() + seconds * 1000,
     };
 
+    const { themes } = this.settings;
     if (type === 'sync') {
-      Object.assign(round, { prompt: drawSyncPrompt(this.used.sync), submissions: {}, verdicts: null, autoVerdicts: null });
+      Object.assign(round, { prompt: drawSyncPrompt(this.used.sync, themes), submissions: {}, verdicts: null, autoVerdicts: null });
     } else if (type === 'telepathy') {
-      Object.assign(round, buildTelepathyGrid(this.used.telepathy), { picks: {}, locked: {} });
+      Object.assign(round, buildTelepathyGrid(this.used.telepathy, themes), { picks: {}, locked: {} });
     } else if (type === 'priority') {
-      const priority = drawPriority(this.used.priority);
+      const priority = drawPriority(this.used.priority, themes);
       Object.assign(round, {
-        prompt: { category: priority.category, text: priority.text },
+        prompt: { category: priority.category, theme: priority.theme, text: priority.text },
         items: priority.items,
         submissions: {},
       });
     } else {
-      const decision = drawDecision(this.used.decision);
+      const decision =
+        type === 'rather' ? drawRather(this.used.rather, themes) : drawDecision(this.used.decision, themes);
       Object.assign(round, {
-        prompt: { category: decision.category, text: decision.text },
+        prompt: { category: decision.category, theme: decision.theme, text: decision.text },
         choices: decision.choices,
         submissions: {},
       });
@@ -468,10 +496,12 @@ export class Room {
     this.emit();
   }
 
-  /* Decision -------------------------------------------------------------- */
+  /* Decision + Would you rather -------------------------------------------- */
 
+  /** Shared by Decision (4 options) and Would you rather (2 options). */
   submitDecision(pid, { choice, prediction } = {}) {
-    this.requireActive('decision');
+    if (!CHOICE_TYPES.has(this.round?.type)) throw new GameError('answers_closed');
+    this.requireActive(this.round.type);
     this.requireActivePlayer(pid);
     const n = this.round.choices.length;
     const valid = (v) => Number.isInteger(v) && v >= 0 && v < n;
@@ -569,7 +599,7 @@ export class Room {
           predictionsCorrect,
           jinx,
         };
-      } else if (r.type === 'decision') {
+      } else if (CHOICE_TYPES.has(r.type)) {
         const sa = r.submissions[a];
         const sb = r.submissions[b];
         const predictionsCorrect = (sa && sb ? [sa.prediction === sb.choice, sb.prediction === sa.choice] : []).filter(Boolean).length;
@@ -672,7 +702,7 @@ export class Room {
           round.results = this.roundResults();
         }
       } else {
-        if (r.type === 'decision') round.choices = r.choices;
+        if (CHOICE_TYPES.has(r.type)) round.choices = r.choices;
         if (r.type === 'priority') round.items = r.items;
         if (active) {
           round.submitted = Object.fromEntries(Object.keys(r.submissions).map((pid) => [pid, true]));
@@ -693,7 +723,7 @@ export class Room {
       you: forPid,
       hostId: this.hostId,
       state: this.state,
-      settings: { ...this.settings, tests: [...this.settings.tests] },
+      settings: { ...this.settings, tests: [...this.settings.tests], themes: [...this.settings.themes] },
       points: POINTS,
       serverNow: Date.now(),
       endedAt: this.endedAt ?? null,

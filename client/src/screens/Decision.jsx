@@ -119,7 +119,7 @@ function OptionGroup({ title, titleAvatar, choices, value, onChange, name }) {
             <label
               key={i}
               className={cx(
-                'flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] border px-3 py-2.5 transition',
+                'relative flex cursor-pointer items-center gap-3 rounded-[var(--radius-control)] border px-3 py-2.5 transition',
                 on ? 'border-ink bg-bench shadow-[0_2px_0_0_var(--color-ink)]' : 'border-line hover:border-ink/40',
               )}
             >
