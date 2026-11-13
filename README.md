@@ -30,6 +30,21 @@ npm run build    # builds the client into client/dist
 npm start        # Express serves client/dist and Socket.io on one port (PORT env, default 3001)
 ```
 
+### Deploy to Render
+
+The repo includes a [Render Blueprint](render.yaml). It sets up one Node web service: Express serves the built client and Socket.io on the same port, and Render supports WebSockets out of the box.
+
+1. Push this repo to GitHub.
+2. In Render, choose **New → Blueprint** and select the repo. Render reads `render.yaml` and creates the `chemistry-game` service.
+   - Doing it by hand instead? Create a **Web Service** with runtime **Node**, build command `npm ci --include=dev && npm run build`, start command `npm start`, and health check path `/health`.
+3. Open the `https://<service>.onrender.com` URL. Invite links use whatever domain the game is served from, so they work automatically.
+
+Things to know:
+
+- **Run a single instance.** Rooms live in server memory. With more than one instance, players in the same room could land on different servers. Scaling out would need a shared store such as Redis plus the Socket.io Redis adapter.
+- **Every deploy or restart ends games in progress**, because the in-memory state is wiped.
+- **The free plan sleeps after about 15 minutes with no traffic.** The first visit after that takes 30–60 seconds to wake the service. A paid instance stays awake.
+
 ### Tests
 
 ```bash

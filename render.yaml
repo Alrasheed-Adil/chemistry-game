@@ -1,0 +1,17 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# One Node web service: Express serves the built React client and Socket.io
+# on the same port, so no separate static site or CORS setup is needed.
+services:
+  - type: web
+    name: chemistry-game
+    runtime: node
+    plan: free # rooms live in memory: keep this service at ONE instance
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NODE_ENV
+        value: production
