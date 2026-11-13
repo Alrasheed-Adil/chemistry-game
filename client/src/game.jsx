@@ -140,6 +140,7 @@ export function GameProvider({ children }) {
       renameTeam: (teamId, name) => call('team:rename', { teamId, name }),
       submitSync: (answer, prediction) => call('sync:submit', { answer, prediction }),
       submitDecision: (choice, prediction) => call('decision:submit', { choice, prediction }),
+      submitPriority: (order) => call('priority:submit', { order }),
       pickTile: (index) => call('telepathy:pick', { index }),
       lockTile: () => call('telepathy:lock'),
       host: {

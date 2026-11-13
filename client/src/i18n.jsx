@@ -21,7 +21,7 @@ const en = {
 
   landing: {
     title: 'A compatibility test for two people.',
-    lead: 'Run three experiments with your partner. Finish with a lab report that measures how well you really know each other.',
+    lead: 'Run four experiments with your partner. Finish with a lab report that measures how well you really know each other.',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Sam',
     create: 'Start a session',
@@ -40,6 +40,7 @@ const en = {
     sync: { name: 'Sync', desc: 'Answer a prompt, then predict what your partner said.' },
     telepathy: { name: 'Telepathy', desc: 'Without talking, pick the same well on the plate as your partner.' },
     decision: { name: 'Decision', desc: 'Choose what you’d do in a situation, and predict your partner’s choice.' },
+    priority: { name: 'Priorities', desc: 'Rank four things from 1 to 4. Every item you both put in the same place scores.' },
   },
 
   header: {
@@ -81,7 +82,7 @@ const en = {
     rounds: 'Rounds',
     timers: 'Time limits',
     seconds: '{n}s',
-    scoring: 'Scoring: +1 for each correct prediction, +1 when you both give the same answer or choice, +2 for a Telepathy match.',
+    scoring: 'Scoring: +1 for each correct prediction, +1 when you both give the same answer or choice, +2 for a Telepathy match, +1 for each item ranked in the same place.',
     start: 'Start testing',
     readyCount: 'Pairs ready: {n}',
     incomplete: 'Incomplete pairs will watch.',
@@ -96,6 +97,7 @@ const en = {
       wave: 'Same wavelength',
       blank: 'Fill in the blank',
       decide: 'Situation',
+      rank: 'Ranking',
     },
     progress: 'Locked in',
     spectating: 'You’re watching this round.',
@@ -143,6 +145,22 @@ const en = {
     choseBy: '{name} chose this',
   },
 
+  priority: {
+    instruction: 'Tap the items in order, starting with your top priority. Tap a placed item to take it back out.',
+    rack: 'Your ranking',
+    slot: 'Rank {n}',
+    empty: 'Empty',
+    top: 'Top priority',
+    bottom: 'Lowest',
+    reset: 'Start over',
+    lock: 'Lock in',
+    lockedTitle: 'Ranking locked in',
+    rankLeft: 'Place {n} more',
+    sameRanks: '{n} of {total} in the same place',
+    rankOf: '{name}: rank {n}',
+    noRanking: 'No ranking',
+  },
+
   telepathy: {
     instruction: 'No talking or gestures. Pick the well you think your partner will pick.',
     pickWell: 'Pick a well',
@@ -186,6 +204,7 @@ const en = {
     jinxStat: 'Same answers: {n}',
     telepathyStat: 'Telepathy: {a} of {b} matched',
     decisionStat: 'Decision: {a} of {b} predictions',
+    priorityStat: 'Priorities: {a} of {b} ranks matched',
     supervised: 'Supervised by {name}',
     points: '{n} points',
     noRounds: 'No rounds were completed, so there’s nothing to report.',
@@ -220,6 +239,7 @@ const en = {
     spectating: 'You’re watching this round.',
     fill_both: 'Fill in your answer and your prediction.',
     pick_both: 'Choose an option for yourself and one for your partner.',
+    rank_all: 'Place all four items before locking in.',
     nothing_to_verify: 'There are no results to check right now.',
     unknown_answer: 'That answer no longer exists.',
     invalid_verdict: 'Choose match or no match.',
@@ -244,7 +264,7 @@ const ar = {
 
   landing: {
     title: 'اختبار توافق لشخصين.',
-    lead: 'أجريا ثلاث تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
+    lead: 'أجريا أربع تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
     nameLabel: 'اسمك',
     namePlaceholder: 'مثال: سارة',
     create: 'ابدأ جلسة',
@@ -263,6 +283,7 @@ const ar = {
     sync: { name: 'تزامن', desc: 'أجب عن سؤال، ثم توقّع إجابة شريكك.' },
     telepathy: { name: 'توارد خواطر', desc: 'دون أي كلام، اختر نفس الخانة التي يختارها شريكك.' },
     decision: { name: 'قرار', desc: 'اختر ما ستفعله في موقف ما، وتوقّع اختيار شريكك.' },
+    priority: { name: 'أولويات', desc: 'رتّب أربعة أشياء من 1 إلى 4. كل عنصر تضعانه في نفس المرتبة يُحتسب نقطة.' },
   },
 
   header: {
@@ -304,7 +325,7 @@ const ar = {
     rounds: 'الجولات',
     timers: 'المدة',
     seconds: '{n} ث',
-    scoring: 'النقاط: +1 لكل توقّع صحيح، +1 عندما تتطابق إجابتاكما أو اختياراكما، +2 لتطابق توارد الخواطر.',
+    scoring: 'النقاط: +1 لكل توقّع صحيح، +1 عندما تتطابق إجابتاكما أو اختياراكما، +2 لتطابق توارد الخواطر، +1 لكل عنصر في نفس المرتبة.',
     start: 'ابدأ الاختبار',
     readyCount: 'الثنائيات الجاهزة: {n}',
     incomplete: 'الثنائيات غير المكتملة ستشاهد فقط.',
@@ -319,6 +340,7 @@ const ar = {
       wave: 'نفس الموجة',
       blank: 'أكمل الفراغ',
       decide: 'موقف',
+      rank: 'ترتيب',
     },
     progress: 'من أكّد',
     spectating: 'أنت تشاهد هذه الجولة.',
@@ -366,6 +388,22 @@ const ar = {
     choseBy: 'اختار {name} هذا الخيار',
   },
 
+  priority: {
+    instruction: 'اضغط على العناصر بالترتيب، ابدأ بأولويتك الأولى. اضغط على عنصر موضوع لإعادته.',
+    rack: 'ترتيبك',
+    slot: 'المرتبة {n}',
+    empty: 'فارغ',
+    top: 'الأولوية الأولى',
+    bottom: 'الأقل',
+    reset: 'ابدأ من جديد',
+    lock: 'تأكيد',
+    lockedTitle: 'تم تأكيد ترتيبك',
+    rankLeft: 'بقي {n}',
+    sameRanks: '{n} من {total} في نفس المرتبة',
+    rankOf: '{name}: المرتبة {n}',
+    noRanking: 'لا يوجد ترتيب',
+  },
+
   telepathy: {
     instruction: 'بدون كلام أو إشارات. اختر الخانة التي تظن أن شريكك سيختارها.',
     pickWell: 'اختر خانة',
@@ -409,6 +447,7 @@ const ar = {
     jinxStat: 'إجابات متطابقة: {n}',
     telepathyStat: 'توارد خواطر: تطابق {a} من {b}',
     decisionStat: 'قرار: {a} من {b} توقعات',
+    priorityStat: 'أولويات: تطابق {a} من {b} مراتب',
     supervised: 'بإشراف {name}',
     points: '{n} نقطة',
     noRounds: 'لم تكتمل أي جولة، لذا لا يوجد ما يُكتب في التقرير.',
@@ -443,6 +482,7 @@ const ar = {
     spectating: 'أنت تشاهد هذه الجولة.',
     fill_both: 'اكتب إجابتك وتوقّعك.',
     pick_both: 'اختر خيارًا لنفسك وآخر لشريكك.',
+    rank_all: 'رتّب العناصر الأربعة قبل التأكيد.',
     nothing_to_verify: 'لا توجد نتائج للمراجعة الآن.',
     unknown_answer: 'هذه الإجابة لم تعد موجودة.',
     invalid_verdict: 'اختر تطابق أو لا تطابق.',
@@ -487,6 +527,7 @@ export const TEST_TILES = {
   sync: { symbol: 'Sy', number: 1 },
   telepathy: { symbol: 'Tp', number: 2 },
   decision: { symbol: 'Dc', number: 3 },
+  priority: { symbol: 'Pr', number: 4 },
 };
 
 /** Compatibility % → bond classification. */

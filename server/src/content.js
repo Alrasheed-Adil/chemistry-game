@@ -237,6 +237,77 @@ export function drawDecision(used) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Priorities — rank four items 1–4 (1 = top priority)                  */
+/* ------------------------------------------------------------------ */
+
+const P = (en, ar, items) => ({
+  category: 'rank',
+  text: { en, ar },
+  items: items.map(([ien, iar]) => ({ en: ien, ar: iar })),
+});
+
+export const PRIORITIES = [
+  P('Rank what matters most on a weekend trip', 'رتّب الأهم في رحلة نهاية الأسبوع', [
+    ['Good food', 'أكل لذيذ'], ['A comfortable stay', 'سكن مريح'], ['Activities', 'أنشطة'], ['Rest', 'راحة'],
+  ]),
+  P("Rank what you'd miss most for a month", 'رتّب ما ستفتقده أكثر لمدة شهر', [
+    ['Your phone', 'الجوال'], ['Coffee', 'القهوة'], ['Social media', 'التواصل الاجتماعي'], ['Sweets', 'الحلويات'],
+  ]),
+  P('Rank what makes a great friend', 'رتّب ما يصنع الصديق الرائع', [
+    ['Loyalty', 'الوفاء'], ['Humor', 'خفة الدم'], ['Honesty', 'الصراحة'], ['Always being there', 'التواجد دائمًا'],
+  ]),
+  P('Rank how you’d spend a free evening', 'رتّب كيف تقضي أمسية فارغة', [
+    ['Movie at home', 'فيلم في البيت'], ['Dinner out', 'عشاء في الخارج'], ['Video games', 'ألعاب فيديو'], ['Seeing friends', 'لقاء الأصدقاء'],
+  ]),
+  P('Rank these meals', 'رتّب هذه الوجبات', [
+    ['Breakfast', 'الفطور'], ['Lunch', 'الغداء'], ['Dinner', 'العشاء'], ['Late-night snack', 'سناك آخر الليل'],
+  ]),
+  P('Rank what matters most in a job', 'رتّب الأهم في الوظيفة', [
+    ['Salary', 'الراتب'], ['The team', 'فريق العمل'], ['Flexibility', 'المرونة'], ['Meaningful work', 'عمل له معنى'],
+  ]),
+  P('Rank the seasons', 'رتّب فصول السنة', [
+    ['Summer', 'الصيف'], ['Winter', 'الشتاء'], ['Spring', 'الربيع'], ['Autumn', 'الخريف'],
+  ]),
+  P('Rank these kinds of trips', 'رتّب أنواع الرحلات هذه', [
+    ['Beach', 'شاطئ'], ['Mountains', 'جبال'], ['Big city', 'مدينة كبيرة'], ['Desert camping', 'تخييم في البر'],
+  ]),
+  P("Rank what you'd want on a desert island", 'رتّب ما تريده معك في جزيرة مهجورة', [
+    ['A knife', 'سكين'], ['A water filter', 'فلتر ماء'], ['A lighter', 'ولاعة'], ['A tent', 'خيمة'],
+  ]),
+  P('Rank these drinks', 'رتّب هذه المشروبات', [
+    ['Coffee', 'قهوة'], ['Tea', 'شاي'], ['Juice', 'عصير'], ['Water', 'ماء'],
+  ]),
+  P('Rank what annoys you most', 'رتّب أكثر ما يزعجك', [
+    ['Slow internet', 'الإنترنت البطيء'], ['Loud chewing', 'صوت المضغ'], ['People running late', 'تأخر الناس'], ['Traffic', 'الزحمة'],
+  ]),
+  P('Rank these superpowers', 'رتّب هذه القوى الخارقة', [
+    ['Flying', 'الطيران'], ['Invisibility', 'الاختفاء'], ['Teleporting', 'الانتقال الفوري'], ['Reading minds', 'قراءة الأفكار'],
+  ]),
+  P("Rank what you'd splurge on", 'رتّب ما تحب أن تصرف عليه', [
+    ['Travel', 'السفر'], ['Gadgets', 'الأجهزة'], ['Clothes', 'الملابس'], ['Food', 'الأكل'],
+  ]),
+  P('Rank these ways to relax', 'رتّب طرق الاسترخاء هذه', [
+    ['Sleeping', 'النوم'], ['Exercise', 'الرياضة'], ['A long drive', 'مشوار بالسيارة'], ['Reading', 'القراءة'],
+  ]),
+  P('Rank what makes a home cozy', 'رتّب ما يجعل البيت مريحًا', [
+    ['Warm lighting', 'إضاءة دافئة'], ['Plants', 'النباتات'], ['A great sofa', 'كنبة مريحة'], ['A nice smell', 'رائحة طيبة'],
+  ]),
+  P('Rank these desserts', 'رتّب هذه الحلويات', [
+    ['Kunafa', 'كنافة'], ['Ice cream', 'آيس كريم'], ['Chocolate cake', 'كيكة شوكولاتة'], ['Dates', 'تمر'],
+  ]),
+  P('Rank what you want in a travel partner', 'رتّب ما تريده في رفيق السفر', [
+    ['Good planning', 'التخطيط الجيد'], ['Patience', 'الصبر'], ['Fun', 'المرح'], ['Spending wisely', 'الاقتصاد في المصاريف'],
+  ]),
+  P('Rank these morning habits', 'رتّب عادات الصباح هذه', [
+    ['Coffee first', 'القهوة أولًا'], ['Checking my phone', 'تفقد الجوال'], ['Exercise', 'الرياضة'], ['Hitting snooze', 'تأجيل المنبّه'],
+  ]),
+];
+
+export function drawPriority(used) {
+  return structuredClone(PRIORITIES[drawIndex(PRIORITIES, used)]);
+}
+
+/* ------------------------------------------------------------------ */
 /* Telepathy — 3×3 well plate                                          */
 /* ------------------------------------------------------------------ */
 

@@ -259,11 +259,12 @@ function HostPlayerMenu({ player }) {
 
 /* ------------------------------ Protocol ------------------------------- */
 
-const TEST_KEYS = ['sync', 'telepathy', 'decision'];
+const TEST_KEYS = ['sync', 'telepathy', 'decision', 'priority'];
 const TIMER_FIELDS = {
   sync: { key: 'questionSeconds', values: [45, 60, 90, 120] },
   telepathy: { key: 'telepathySeconds', values: [10, 15, 20, 30] },
   decision: { key: 'decisionSeconds', values: [20, 30, 45, 60] },
+  priority: { key: 'prioritySeconds', values: [30, 45, 60, 90] },
 };
 
 function Protocol() {
@@ -299,6 +300,7 @@ function Protocol() {
               >
                 <input
                   type="checkbox"
+                  aria-label={t(`tests.${key}.name`)}
                   className="size-4 accent-[#13233A]"
                   checked={on}
                   disabled={!isHost}

@@ -1,6 +1,6 @@
 # Chemistry lab
 
-A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run three experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
+A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run four experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
 
 The game is fully bilingual in **English and العربية (Arabic, right-to-left)**. Each player picks their own language, so a mixed group sees every prompt in their own language.
 
@@ -11,6 +11,7 @@ The game is fully bilingual in **English and العربية (Arabic, right-to-le
 | **Sy** | **Sync** | Everyone gets the same prompt. Type **your own answer** and **predict your partner's**. Clear matches are scored automatically. **The host decides close calls** ("Basketball court" vs "Hoop court"). | +1 per correct prediction, +1 if you gave the same answer |
 | **Tp** | **Telepathy** | A 3×3 well plate appears (emoji, colors, shapes, numbers or words). Without talking, both partners try to pick the same well. | +2 for the same well |
 | **Dc** | **Decision** | A situation with four options (A–D, or أ–د in Arabic). Choose what **you** would do and predict what **your partner** will choose. | +1 per correct prediction, +1 if you chose the same option |
+| **Pr** | **Priorities** | Four items to rank from 1 (top priority) to 4. Tap them into a numbered rack in order; nothing starts pre-ranked, so a match is never an accident. | +1 for each item you both put at the same rank (up to 4) |
 
 The lab report turns each pair's score into a **compatibility index**: points earned out of points possible. The index is shown on a universal-indicator strip and classified as a bond:
 
@@ -50,7 +51,7 @@ npm start        # Express serves client/dist + Socket.io on one port (PORT env,
 ### Tests
 
 ```bash
-npm test -w server   # state machine (all three experiments), Arabic + English matching, content checks
+npm test -w server   # state machine (all four experiments), Arabic + English matching, content checks
 ```
 
 ### Deploy to Render
@@ -117,7 +118,7 @@ chemistry-game/
 │   │   ├── sockets.js        # socket event → Room method wiring, per-player broadcasts
 │   │   ├── room.js           # ★ authoritative state machine (pairs, rounds, scoring)
 │   │   ├── matching.js       # fuzzy answer matching, English + Arabic
-│   │   └── content.js        # bilingual prompts, decisions, well plates
+│   │   └── content.js        # bilingual prompts, decisions, rankings, well plates
 │   └── test/game.test.js
 └── client/
     ├── vite.config.js        # proxies /socket.io → :3001 in dev
@@ -137,6 +138,7 @@ chemistry-game/
             ├── SyncReveal.jsx    # side-by-side results + host ✓/✗
             ├── Telepathy.jsx     # well plate pick + reveal
             ├── Decision.jsx      # A–D situation pick + reveal
+            ├── Priority.jsx      # 1–4 ranking rack + side-by-side reveal
             └── GameOver.jsx      # lab report / certificate
 ```
 
@@ -145,15 +147,16 @@ chemistry-game/
 ```
 waiting ──start──▶ question_active  (Sync)      ──┐
                    telepathy_active (Telepathy) ──┼─(all locked / timer / host)─▶ revealing ──next──▶ …
-                   decision_active  (Decision)  ──┘
+                   decision_active  (Decision)  ──┤
+                   priority_active  (Priorities)──┘
                                                           last round ──▶ game_over ──▶ waiting
 ```
 
-`revealing` is shared by all three experiments. `round.type` (`'sync'`, `'telepathy'` or `'decision'`) tells the client which reveal screen to show.
+`revealing` is shared by all four experiments. `round.type` (`'sync'`, `'telepathy'`, `'decision'` or `'priority'`) tells the client which reveal screen to show.
 
 ### Networking model
 
-- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
+- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit`, `priority:submit`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
 - Error `code`s are language-neutral and are translated on the client (`errors.*` in `i18n.jsx`).
 - Content is sent as `{ en, ar }` pairs, and each client shows its own language.
 - After each change, every player receives a **personalised snapshot** (`room:state`). While a round is active, other players' answers and picks are **left out** of the snapshot.
@@ -162,4 +165,4 @@ waiting ──start──▶ question_active  (Sync)      ──┐
 
 ### Adding content
 
-Prompts, decisions and well plates live in `server/src/content.js`, and every entry needs both `en` and `ar`; the tests check this. UI copy lives in `client/src/i18n.jsx`.
+Prompts, decisions, rankings and well plates live in `server/src/content.js`, and every entry needs both `en` and `ar`; the tests check this. UI copy lives in `client/src/i18n.jsx`.

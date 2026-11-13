@@ -120,7 +120,7 @@ export function ElementTile({ symbol, number, color = '#13233A', name, size = 'm
 
 export function TestTile({ type, size = 'sm' }) {
   const tile = TEST_TILES[type];
-  const color = { sync: '#1d7fc0', telepathy: '#5a48d6', decision: '#e8780c' }[type];
+  const color = { sync: '#1d7fc0', telepathy: '#5a48d6', decision: '#e8780c', priority: '#c2185b' }[type];
   return <ElementTile symbol={tile.symbol} number={tile.number} color={color} size={size} />;
 }
 

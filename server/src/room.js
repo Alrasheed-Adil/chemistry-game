@@ -10,6 +10,7 @@
  *   question_active   — Sync trial: type an answer + predict your partner's
  *   telepathy_active  — Telepathy trial: silently pick a well on the plate
  *   decision_active   — Decision trial: pick A–D for a situation + predict partner
+ *   priority_active   — Priorities trial: rank four items 1–4
  *   revealing         — results of the current trial (any type); in Sync the
  *                       host can override matches here
  *   game_over         — final lab report
@@ -18,7 +19,7 @@
  * (see client/src/i18n.jsx → errors.*), so the server stays language-neutral.
  */
 
-import { AVATARS, ELEMENT_COUNT, buildTelepathyGrid, drawDecision, drawSyncPrompt, shuffle } from './content.js';
+import { AVATARS, ELEMENT_COUNT, buildTelepathyGrid, drawDecision, drawPriority, drawSyncPrompt, shuffle } from './content.js';
 import { judge } from './matching.js';
 
 export class GameError extends Error {
@@ -33,24 +34,32 @@ export const STATES = Object.freeze({
   QUESTION_ACTIVE: 'question_active',
   TELEPATHY_ACTIVE: 'telepathy_active',
   DECISION_ACTIVE: 'decision_active',
+  PRIORITY_ACTIVE: 'priority_active',
   REVEALING: 'revealing',
   GAME_OVER: 'game_over',
 });
 
-const ACTIVE_STATES = new Set([STATES.QUESTION_ACTIVE, STATES.TELEPATHY_ACTIVE, STATES.DECISION_ACTIVE]);
+const ACTIVE_STATES = new Set([
+  STATES.QUESTION_ACTIVE,
+  STATES.TELEPATHY_ACTIVE,
+  STATES.DECISION_ACTIVE,
+  STATES.PRIORITY_ACTIVE,
+]);
 const STATE_FOR_TYPE = {
   sync: STATES.QUESTION_ACTIVE,
   telepathy: STATES.TELEPATHY_ACTIVE,
   decision: STATES.DECISION_ACTIVE,
+  priority: STATES.PRIORITY_ACTIVE,
 };
 
-export const TESTS = Object.freeze(['sync', 'telepathy', 'decision']);
+export const TESTS = Object.freeze(['sync', 'telepathy', 'decision', 'priority']);
 
 export const POINTS = Object.freeze({
   prediction: 1, // Sync + Decision: each correct prediction of your partner
   jinx: 1, // Sync: both partners gave the same answer
   sameChoice: 1, // Decision: both partners chose the same option
   telepathy: 2, // Telepathy: both picked the same well
+  sameRank: 1, // Priorities: each item both partners put at the same rank
 });
 
 const SETTING_OPTIONS = {
@@ -58,6 +67,7 @@ const SETTING_OPTIONS = {
   questionSeconds: [30, 45, 60, 90, 120],
   telepathySeconds: [8, 10, 15, 20, 30],
   decisionSeconds: [15, 20, 30, 45, 60],
+  prioritySeconds: [30, 45, 60, 90],
 };
 
 const LIMITS = { name: 16, teamName: 24, answer: 60, players: 24 };
@@ -92,12 +102,13 @@ export class Room {
       questionSeconds: 60,
       telepathySeconds: 15,
       decisionSeconds: 30,
+      prioritySeconds: 45,
     };
     this.plan = [];
     this.roundIndex = 0;
     this.round = null;
     this.history = [];
-    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set() };
+    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set(), priority: new Set() };
     this.teamCounter = 0;
     this.timer = null;
     this.hostTimer = null;
@@ -377,6 +388,7 @@ export class Room {
       sync: this.settings.questionSeconds,
       telepathy: this.settings.telepathySeconds,
       decision: this.settings.decisionSeconds,
+      priority: this.settings.prioritySeconds,
     }[type];
     const round = {
       number: this.roundIndex + 1,
@@ -390,6 +402,13 @@ export class Room {
       Object.assign(round, { prompt: drawSyncPrompt(this.used.sync), submissions: {}, verdicts: null, autoVerdicts: null });
     } else if (type === 'telepathy') {
       Object.assign(round, buildTelepathyGrid(this.used.telepathy), { picks: {}, locked: {} });
+    } else if (type === 'priority') {
+      const priority = drawPriority(this.used.priority);
+      Object.assign(round, {
+        prompt: { category: priority.category, text: priority.text },
+        items: priority.items,
+        submissions: {},
+      });
     } else {
       const decision = drawDecision(this.used.decision);
       Object.assign(round, {
@@ -458,6 +477,26 @@ export class Room {
     const valid = (v) => Number.isInteger(v) && v >= 0 && v < n;
     if (!valid(choice) || !valid(prediction)) throw new GameError('pick_both');
     this.round.submissions[pid] = { choice, prediction };
+    if (!this.checkRoundComplete()) this.emit();
+  }
+
+  /* Priorities ------------------------------------------------------------ */
+
+  /**
+   * `order` lists item indices from rank 1 (top priority) to rank 4,
+   * e.g. [2, 0, 3, 1] means item 2 is #1, item 0 is #2, and so on.
+   */
+  submitPriority(pid, { order } = {}) {
+    this.requireActive('priority');
+    this.requireActivePlayer(pid);
+    const n = this.round.items.length;
+    const valid =
+      Array.isArray(order) &&
+      order.length === n &&
+      order.every((i) => Number.isInteger(i) && i >= 0 && i < n) &&
+      new Set(order).size === n;
+    if (!valid) throw new GameError('rank_all');
+    this.round.submissions[pid] = { order: [...order] };
     if (!this.checkRoundComplete()) this.emit();
   }
 
@@ -540,6 +579,16 @@ export class Room {
           max: 2 * POINTS.prediction + POINTS.sameChoice,
           predictionsCorrect,
           same,
+        };
+      } else if (r.type === 'priority') {
+        const oa = r.submissions[a]?.order;
+        const ob = r.submissions[b]?.order;
+        // Same item at the same rank position → +1 each.
+        const sameRanks = oa && ob ? oa.filter((item, rank) => ob[rank] === item).length : 0;
+        results[teamId] = {
+          points: sameRanks * POINTS.sameRank,
+          max: r.items.length * POINTS.sameRank,
+          sameRanks,
         };
       } else {
         const match = r.picks[a] != null && r.picks[a] === r.picks[b];
@@ -624,6 +673,7 @@ export class Room {
         }
       } else {
         if (r.type === 'decision') round.choices = r.choices;
+        if (r.type === 'priority') round.items = r.items;
         if (active) {
           round.submitted = Object.fromEntries(Object.keys(r.submissions).map((pid) => [pid, true]));
           round.mine = r.submissions[forPid] ?? null;

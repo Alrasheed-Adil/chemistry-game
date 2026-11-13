@@ -164,7 +164,7 @@ export function HostBar() {
   const { state, round } = view;
   if (state === 'waiting') return null;
 
-  const active = state === 'question_active' || state === 'telepathy_active' || state === 'decision_active';
+  const active = state.endsWith('_active'); // question / telepathy / decision / priority
   const isLast = round && round.number >= view.totalRounds;
 
   let status = null;

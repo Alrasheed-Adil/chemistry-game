@@ -6,7 +6,8 @@
  *   question_active  → SyncQuestion
  *   telepathy_active → TelepathyActive
  *   decision_active  → DecisionActive
- *   revealing        → SyncReveal | TelepathyReveal | DecisionReveal (by round type)
+ *   priority_active  → PriorityActive
+ *   revealing        → Sync / Telepathy / Decision / Priority reveal (by round type)
  *   game_over        → GameOver
  */
 
@@ -19,6 +20,7 @@ import { DecisionActive, DecisionReveal } from './screens/Decision.jsx';
 import GameOver from './screens/GameOver.jsx';
 import Landing from './screens/Landing.jsx';
 import Lobby from './screens/Lobby.jsx';
+import { PriorityActive, PriorityReveal } from './screens/Priority.jsx';
 import SyncQuestion from './screens/SyncQuestion.jsx';
 import SyncReveal from './screens/SyncReveal.jsx';
 import { TelepathyActive, TelepathyReveal } from './screens/Telepathy.jsx';
@@ -44,8 +46,17 @@ function CurrentScreen() {
     case 'decision_active':
       screen = <DecisionActive />;
       break;
+    case 'priority_active':
+      screen = <PriorityActive />;
+      break;
     case 'revealing':
-      screen = { sync: <SyncReveal />, telepathy: <TelepathyReveal />, decision: <DecisionReveal /> }[view.round?.type] ?? null;
+      screen =
+        {
+          sync: <SyncReveal />,
+          telepathy: <TelepathyReveal />,
+          decision: <DecisionReveal />,
+          priority: <PriorityReveal />,
+        }[view.round?.type] ?? null;
       break;
     case 'game_over':
       screen = <GameOver />;

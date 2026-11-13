@@ -109,6 +109,7 @@ export function registerSockets(io) {
 
     on('sync:submit', ({ answer, prediction }) => current().submitSync(pid, { answer, prediction }));
     on('decision:submit', ({ choice, prediction }) => current().submitDecision(pid, { choice, prediction }));
+    on('priority:submit', ({ order }) => current().submitPriority(pid, { order }));
     on('telepathy:pick', ({ index }) => current().pickTile(pid, index));
     on('telepathy:lock', () => current().lockTile(pid));
 

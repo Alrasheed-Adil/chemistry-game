@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DECISIONS, SYNC_PROMPTS } from '../src/content.js';
+import { DECISIONS, PRIORITIES, SYNC_PROMPTS } from '../src/content.js';
 import { judge } from '../src/matching.js';
 import { Room } from '../src/room.js';
 
@@ -29,6 +29,11 @@ test('content: every prompt and choice is bilingual', () => {
     assert.ok(d.text.en && d.text.ar);
     assert.equal(d.choices.length, 4);
     for (const c of d.choices) assert.ok(c.en && c.ar);
+  }
+  for (const p of PRIORITIES) {
+    assert.ok(p.text.en && p.text.ar);
+    assert.equal(p.items.length, 4);
+    for (const i of p.items) assert.ok(i.en && i.ar);
   }
 });
 
@@ -105,5 +110,35 @@ test('non-host cannot control the game; pairs get element ids', () => {
   assert.equal(team.name, null);
   room.renameTeam('play-0001', team.id, 'Bond Squad');
   assert.equal(room.teams.get(team.id).name, 'Bond Squad');
+  room.dispose();
+});
+
+test('priorities: each item at the same rank scores a point', () => {
+  const room = setupRoom(['priority']);
+  const [team] = room.fullTeams();
+  const [a, b] = team.members;
+  room.start('host-0001');
+  assert.equal(room.state, 'priority_active');
+  assert.equal(room.toView(a).round.items.length, 4);
+
+  // Invalid rankings are rejected: duplicates, wrong length, out of range
+  assert.throws(() => room.submitPriority(a, { order: [0, 0, 1, 2] }), /rank_all/);
+  assert.throws(() => room.submitPriority(a, { order: [0, 1, 2] }), /rank_all/);
+  assert.throws(() => room.submitPriority(a, { order: [0, 1, 2, 7] }), /rank_all/);
+
+  room.submitPriority(a, { order: [2, 0, 3, 1] });
+  assert.equal(room.toView(b).round.submissions, undefined); // hidden until reveal
+  room.submitPriority(b, { order: [2, 3, 0, 1] }); // ranks 1 and 4 agree
+  assert.equal(room.state, 'revealing');
+  assert.deepEqual(room.roundResults()[team.id], { points: 2, max: 4, sameRanks: 2 });
+  room.next('host-0001');
+  assert.equal(team.score, 2);
+  room.dispose();
+});
+
+test('settings: all four experiments cycle in order', () => {
+  const room = setupRoom(['sync', 'telepathy', 'decision', 'priority']);
+  room.start('host-0001');
+  assert.deepEqual(room.plan, ['sync', 'telepathy', 'decision', 'priority', 'sync', 'telepathy']);
   room.dispose();
 });

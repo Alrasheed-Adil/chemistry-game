@@ -12,7 +12,7 @@ import { useGame } from '../game.jsx';
 import { bondFor, elementOf, pairName, useLang } from '../i18n.jsx';
 
 function teamStats(history, teamId) {
-  const s = { points: 0, max: 0, sync: [0, 0], jinx: 0, telepathy: [0, 0], decision: [0, 0] };
+  const s = { points: 0, max: 0, sync: [0, 0], jinx: 0, telepathy: [0, 0], decision: [0, 0], priority: [0, 0] };
   for (const round of history) {
     const r = round.results?.[teamId];
     if (!r) continue;
@@ -25,6 +25,9 @@ function teamStats(history, teamId) {
     } else if (round.type === 'decision') {
       s.decision[0] += r.predictionsCorrect;
       s.decision[1] += 2;
+    } else if (round.type === 'priority') {
+      s.priority[0] += r.sameRanks;
+      s.priority[1] += r.max;
     } else {
       s.telepathy[0] += r.match ? 1 : 0;
       s.telepathy[1] += 1;
@@ -100,6 +103,7 @@ function Certificate({ entry, hostName, isMine }) {
     stats.sync[1] ? t('report.jinxStat', { n: stats.jinx }) : null,
     stats.telepathy[1] ? t('report.telepathyStat', { a: stats.telepathy[0], b: stats.telepathy[1] }) : null,
     stats.decision[1] ? t('report.decisionStat', { a: stats.decision[0], b: stats.decision[1] }) : null,
+    stats.priority[1] ? t('report.priorityStat', { a: stats.priority[0], b: stats.priority[1] }) : null,
   ].filter(Boolean);
 
   return (
