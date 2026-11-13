@@ -7,6 +7,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { useGame } from '../game.jsx';
+import { AVATAR_BY_ID } from '../../../shared/avatars.js';
 import { TEST_TILES, useLang } from '../i18n.jsx';
 
 export const cx = (...c) => c.filter(Boolean).join(' ');
@@ -65,8 +66,14 @@ export function useBusy() {
 
 /* ------------------------------- Avatar -------------------------------- */
 
+/** Soft background tint per avatar group, so a room full of avatars reads at a glance. */
+export const AVATAR_TINTS = { screen: '#FFF1E0', stage: '#FBE7F0', heroes: '#E3EEFB', anime: '#FFF6D6', lab: '#E2F4EA' };
+
 export function Avatar({ player, size = 'md', ring, dim, className }) {
-  const sizes = { xs: 'size-6 text-[13px]', sm: 'size-8 text-lg', md: 'size-11 text-2xl', lg: 'size-16 text-[34px]' };
+  const sizes = { xs: 'size-6 text-[13px]', sm: 'size-8 text-lg', md: 'size-11 text-2xl', lg: 'size-16 text-[34px]', xl: 'size-24 text-[52px]' };
+  const { L } = useLang();
+  const look = AVATAR_BY_ID[player?.avatar];
+  const showBadge = look?.b && (size === 'md' || size === 'lg' || size === 'xl');
   return (
     <span
       className={cx(
@@ -76,13 +83,30 @@ export function Avatar({ player, size = 'md', ring, dim, className }) {
         dim && 'opacity-35 grayscale',
         className,
       )}
-      style={ring ? { borderColor: ring } : undefined}
-      title={player?.name}
+      style={{ ...(ring ? { borderColor: ring } : null), ...(look ? { backgroundColor: AVATAR_TINTS[look.group] } : null) }}
+      title={look ? `${player.name} · ${L(look)}` : player?.name}
     >
-      <span className="leading-none">{player?.avatar ?? '·'}</span>
+      <span className="leading-none">{look?.e ?? player?.avatar ?? '·'}</span>
+      {showBadge ? <AvatarBadge emoji={look.b} size={size} /> : null}
       {player && !player.connected ? (
         <span className="absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2 border-bench bg-graphite/60" />
       ) : null}
+    </span>
+  );
+}
+
+/** The accessory emoji tucked onto the avatar's shoulder. */
+export function AvatarBadge({ emoji, size }) {
+  const sizes = { md: 'size-5 text-[11px]', lg: 'size-7 text-[15px]', xl: 'size-9 text-xl' };
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        'absolute -end-1 -top-1 grid place-items-center rounded-full border border-line bg-bench leading-none shadow-[0_1px_0_var(--color-line)]',
+        sizes[size],
+      )}
+    >
+      {emoji}
     </span>
   );
 }
@@ -120,7 +144,15 @@ export function ElementTile({ symbol, number, color = '#13233A', name, size = 'm
 
 export function TestTile({ type, size = 'sm' }) {
   const tile = TEST_TILES[type];
-  const color = { sync: '#1d7fc0', telepathy: '#5a48d6', decision: '#e8780c', priority: '#c2185b', rather: '#0e9688' }[type];
+  const color = {
+    sync: '#1d7fc0',
+    telepathy: '#5a48d6',
+    decision: '#e8780c',
+    priority: '#c2185b',
+    rather: '#0e9688',
+    princess: '#c9a227',
+    bestie: '#a0522d',
+  }[type];
   return <ElementTile symbol={tile.symbol} number={tile.number} color={color} size={size} />;
 }
 
@@ -303,7 +335,10 @@ export function PromptCard({ round, total, timerTotal, active }) {
       <div className="flex items-center gap-3 border-b border-line-soft px-5 py-3 sm:px-6">
         <TestTile type={round.type} size="sm" />
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="font-medium">{t(`tests.${round.type}.name`)}</div>
+          <div className="font-medium">
+            {/* Both treatment editions share a header; the category line says which edition. */}
+            {round.type === 'bestie' || round.type === 'princess' ? t('tests.princess.short') : t(`tests.${round.type}.name`)}
+          </div>
           <div className="truncate text-sm text-graphite">{category}</div>
         </div>
         <div className="tabular shrink-0 text-sm text-graphite">{t('round.count', { n: round.number, total })}</div>

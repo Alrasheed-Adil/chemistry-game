@@ -1,6 +1,6 @@
 # Chemistry lab
 
-A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run five experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
+A real-time multiplayer compatibility test for pairs. Friends, couples or teammates run up to seven experiments and finish with a **lab report**: a certificate showing their compatibility index, bond type and per-test results.
 
 The game is fully bilingual in **English and العربية (Arabic, right-to-left)**. Each player picks their own language, so a mixed group sees every prompt in their own language.
 
@@ -13,6 +13,14 @@ The game is fully bilingual in **English and العربية (Arabic, right-to-le
 | **Dc** | **Decision** | A situation with four options (A–D, or أ–د in Arabic). Choose what **you** would do and predict what **your partner** will choose. | +1 per correct prediction, +1 if you chose the same option |
 | **Wr** | **Would you rather** | Two hard options ("know a truth that hurts" or "believe a lie that comforts"). Choose one, and predict which your partner chose. | +1 per correct prediction, +1 if you chose the same |
 | **Pr** | **Priorities** | Four items to rank from 1 (top priority) to 4. Tap them into a numbered rack in order; nothing starts pre-ranked, so a match is never an accident. | +1 for each item you both put at the same rank (up to 4) |
+| **Pt** | **Bare minimum or princess treatment** | The viral debate, couples edition. Five things a partner might do ("Opening the car door for you", "Texting good morning every day"). Call each one *bare minimum* or *princess treatment*; the reveal also shows how the whole room split. | +1 for each statement you called the same way (up to 5) |
+| **Fr** | **Bare minimum or princess treatment: friends edition** | The same game for friendship, not romance ("Holding your stuff while you're on a ride", "Picking up your call at 2 a.m."). | +1 for each statement you called the same way (up to 5) |
+
+The treatment editions use their own statement pools (40 each) and ignore question themes.
+
+### Avatars
+
+Each player gets a random avatar and can change it from the lobby (tap **Change avatar** or your own avatar). The catalog in `shared/avatars.js` has ~70 parody avatars in five groups: screen legends, pop stars, movie heroes, anime and lab legends (Keanu Leaves, Hairy Potter, Na-ramen-to, Amr Kebab, Ibn Sina-bon…). They're emoji compositions with pun names, not likenesses or official artwork. One avatar per person per session.
 
 ### Question themes
 
@@ -62,7 +70,7 @@ npm start        # Express serves client/dist + Socket.io on one port (PORT env,
 ### Tests
 
 ```bash
-npm test -w server   # state machine (all five experiments), themes, Arabic + English matching, content checks
+npm test -w server   # state machine (all seven experiments), avatars, themes, Arabic + English matching, content checks
 ```
 
 ### Deploy to Render
@@ -123,6 +131,7 @@ The layout mirrors automatically for Arabic: it uses logical CSS properties (`ms
 chemistry-game/
 ├── package.json              # npm workspaces + dev / build / start scripts
 ├── render.yaml               # Render Blueprint (single Node web service)
+├── shared/avatars.js         # avatar catalog, imported by server and client
 ├── server/
 │   ├── src/
 │   │   ├── index.js          # Express + Socket.io bootstrap; serves client/dist in prod
@@ -141,6 +150,7 @@ chemistry-game/
         ├── components/
         │   ├── ui.jsx        # Button, ElementTile, Burette, IndicatorStrip, Bubbles, PromptCard…
         │   ├── shell.jsx     # Header, Readings scoreboard, Host controls, lock-in progress
+        │   ├── AvatarPicker.jsx # avatar sheet, grouped by category
         │   └── BondScale.jsx # indicator strip with bond labels
         └── screens/
             ├── Landing.jsx       # intake form, experiments, how results are read
@@ -151,6 +161,7 @@ chemistry-game/
             ├── Decision.jsx      # A–D situation pick + reveal
             ├── Priority.jsx      # 1–4 ranking rack + side-by-side reveal
             ├── Rather.jsx        # would-you-rather versus cards + reveal
+            ├── Treatment.jsx     # bare minimum / princess treatment calls + reveal
             └── GameOver.jsx      # lab report / certificate
 ```
 
@@ -161,15 +172,16 @@ waiting ──start──▶ question_active  (Sync)      ──┐
                    telepathy_active (Telepathy) ──┼─(all locked / timer / host)─▶ revealing ──next──▶ …
                    decision_active  (Decision)  ──┤
                    priority_active  (Priorities)──┤
-                   rather_active    (Would you rather)┘
+                   rather_active    (Would you rather)──┤
+                   treatment_active (Princess treatment, either edition)┘
                                                           last round ──▶ game_over ──▶ waiting
 ```
 
-`revealing` is shared by all five experiments. `round.type` (`'sync'`, `'telepathy'`, `'decision'`, `'priority'` or `'rather'`) tells the client which reveal screen to show.
+`revealing` is shared by all seven experiments. `round.type` (`'sync'`, `'telepathy'`, `'decision'`, `'priority'`, `'rather'`, `'princess'` or `'bestie'`) tells the client which reveal screen to show.
 
 ### Networking model
 
-- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit` (also used by Would you rather), `priority:submit`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
+- The **server is authoritative**. Clients send intents (`sync:submit`, `decision:submit` (also used by Would you rather), `priority:submit`, `treatment:submit`, `player:avatar`, `telepathy:pick`, `host:verdict`, …), and every event gets an `{ ok, code }` acknowledgement.
 - Error `code`s are language-neutral and are translated on the client (`errors.*` in `i18n.jsx`).
 - Content is sent as `{ en, ar }` pairs, and each client shows its own language.
 - After each change, every player receives a **personalised snapshot** (`room:state`). While a round is active, other players' answers and picks are **left out** of the snapshot.

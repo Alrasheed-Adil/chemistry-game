@@ -21,7 +21,7 @@ const en = {
 
   landing: {
     title: 'A compatibility test for two people.',
-    lead: 'Run five experiments with your partner. Finish with a lab report that measures how well you really know each other.',
+    lead: 'Run up to seven experiments with your partner. Finish with a lab report that measures how well you really know each other.',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Sam',
     create: 'Start a session',
@@ -42,6 +42,16 @@ const en = {
     decision: { name: 'Decision', desc: 'Choose what you’d do in a situation, and predict your partner’s choice.' },
     priority: { name: 'Priorities', desc: 'Rank four things from 1 to 4. Every item you both put in the same place scores.' },
     rather: { name: 'Would you rather', desc: 'Two hard options. Choose one, and predict which your partner chose.' },
+    princess: {
+      name: 'Bare minimum or princess treatment',
+      short: 'Princess treatment',
+      desc: 'Five things a partner might do. Call each one bare minimum or princess treatment. Every call you share scores.',
+    },
+    bestie: {
+      name: 'Bare minimum or princess treatment: friends edition',
+      short: 'Friends edition',
+      desc: 'The same verdicts, for friendship, not romance. Every call you share scores.',
+    },
   },
 
   themes: {
@@ -90,7 +100,9 @@ const en = {
     rounds: 'Rounds',
     timers: 'Time limits',
     seconds: '{n}s',
-    scoring: 'Scoring: +1 for each correct prediction, +1 when you both give the same answer or choice, +2 for a Telepathy match, +1 for each item ranked in the same place.',
+    scoring: 'Scoring: +1 for each correct prediction, +1 when you both give the same answer or choice, +2 for a Telepathy match, +1 for each item ranked in the same place, +1 for each treatment call you share.',
+    avatar: 'Your avatar',
+    changeAvatar: 'Change avatar',
     start: 'Start testing',
     readyCount: 'Pairs ready: {n}',
     incomplete: 'Incomplete pairs will watch.',
@@ -108,6 +120,8 @@ const en = {
       dilemma: 'Dilemma',
       rank: 'Ranking',
       rather: 'Two hard options',
+      princess: 'Couples edition',
+      bestie: 'Friends edition',
       self: 'Inner self',
       meaning: 'Meaning',
       values: 'Values',
@@ -182,6 +196,28 @@ const en = {
     lockedTitle: 'Choice locked in',
   },
 
+  treatment: {
+    instruction: 'Call each one. Is it the bare minimum, or princess treatment?',
+    bare: 'Bare minimum',
+    princess: 'Princess treatment',
+    called: '{n} of {total} called',
+    lock: 'Lock in',
+    lockedTitle: 'Verdicts locked in',
+    sameCalls: '{n} of {total} calls matched',
+    room: 'Whole room',
+    noCall: 'No call',
+    split: '{a} bare minimum · {b} princess',
+  },
+
+  avatars: {
+    title: 'Pick your avatar',
+    subtitle: 'Famous faces, slightly off. Each avatar can be worn by one person at a time.',
+    taken: 'Worn by {name}',
+    yours: 'Yours',
+    close: 'Done',
+    groups: { screen: 'Screen legends', stage: 'Pop stars', heroes: 'Movie heroes', anime: 'Anime', lab: 'Lab legends' },
+  },
+
   telepathy: {
     instruction: 'No talking or gestures. Pick the well you think your partner will pick.',
     pickWell: 'Pick a well',
@@ -227,6 +263,8 @@ const en = {
     decisionStat: 'Decision: {a} of {b} predictions',
     priorityStat: 'Priorities: {a} of {b} ranks matched',
     ratherStat: 'Would you rather: {a} of {b} predictions',
+    princessStat: 'Princess treatment: {a} of {b} calls matched',
+    bestieStat: 'Friends edition: {a} of {b} calls matched',
     supervised: 'Supervised by {name}',
     points: '{n} points',
     noRounds: 'No rounds were completed, so there’s nothing to report.',
@@ -262,6 +300,9 @@ const en = {
     fill_both: 'Fill in your answer and your prediction.',
     pick_both: 'Choose an option for yourself and one for your partner.',
     rank_all: 'Place all four items before locking in.',
+    call_all: 'Call every statement before locking in.',
+    invalid_avatar: 'That avatar isn’t available.',
+    avatar_taken: 'Someone is already wearing that avatar.',
     need_one_theme: 'Keep at least one question theme selected.',
     nothing_to_verify: 'There are no results to check right now.',
     unknown_answer: 'That answer no longer exists.',
@@ -287,7 +328,7 @@ const ar = {
 
   landing: {
     title: 'اختبار توافق لشخصين.',
-    lead: 'أجريا خمس تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
+    lead: 'أجريا حتى سبع تجارب معًا، واحصلا في النهاية على تقرير مختبر يقيس مدى معرفتكما ببعض.',
     nameLabel: 'اسمك',
     namePlaceholder: 'مثال: سارة',
     create: 'ابدأ جلسة',
@@ -308,6 +349,16 @@ const ar = {
     decision: { name: 'قرار', desc: 'اختر ما ستفعله في موقف ما، وتوقّع اختيار شريكك.' },
     priority: { name: 'أولويات', desc: 'رتّب أربعة أشياء من 1 إلى 4. كل عنصر تضعانه في نفس المرتبة يُحتسب نقطة.' },
     rather: { name: 'هذا أو ذاك', desc: 'خياران صعبان. اختر أحدهما، وتوقّع ما اختاره شريكك.' },
+    princess: {
+      name: 'أقل الواجب ولا معاملة أميرة',
+      short: 'معاملة أميرة',
+      desc: 'خمسة أشياء قد يفعلها الشريك. احكم على كل واحد: أقل الواجب أو معاملة أميرة. كل حكم تتفقان عليه يُحتسب نقطة.',
+    },
+    bestie: {
+      name: 'أقل الواجب ولا معاملة أميرة: نسخة الأصدقاء',
+      short: 'نسخة الأصدقاء',
+      desc: 'نفس الأحكام، لكن للصداقة لا للحب. كل حكم تتفقان عليه يُحتسب نقطة.',
+    },
   },
 
   themes: {
@@ -356,7 +407,9 @@ const ar = {
     rounds: 'الجولات',
     timers: 'المدة',
     seconds: '{n} ث',
-    scoring: 'النقاط: +1 لكل توقّع صحيح، +1 عندما تتطابق إجابتاكما أو اختياراكما، +2 لتطابق توارد الخواطر، +1 لكل عنصر في نفس المرتبة.',
+    scoring: 'النقاط: +1 لكل توقّع صحيح، +1 عندما تتطابق إجابتاكما أو اختياراكما، +2 لتطابق توارد الخواطر، +1 لكل عنصر في نفس المرتبة، +1 لكل حكم تتفقان عليه في معاملة الأميرة.',
+    avatar: 'صورتك الرمزية',
+    changeAvatar: 'غيّر الصورة',
     start: 'ابدأ الاختبار',
     readyCount: 'الثنائيات الجاهزة: {n}',
     incomplete: 'الثنائيات غير المكتملة ستشاهد فقط.',
@@ -374,6 +427,8 @@ const ar = {
       dilemma: 'معضلة',
       rank: 'ترتيب',
       rather: 'خياران صعبان',
+      princess: 'نسخة الأزواج',
+      bestie: 'نسخة الأصدقاء',
       self: 'الذات',
       meaning: 'المعنى',
       values: 'القيم',
@@ -448,6 +503,28 @@ const ar = {
     lockedTitle: 'تم تأكيد اختيارك',
   },
 
+  treatment: {
+    instruction: 'احكم على كل واحد: أقل الواجب، ولا معاملة أميرة؟',
+    bare: 'أقل الواجب',
+    princess: 'معاملة أميرة',
+    called: 'حكمت على {n} من {total}',
+    lock: 'تأكيد',
+    lockedTitle: 'تم تأكيد أحكامك',
+    sameCalls: 'اتفقتما على {n} من {total}',
+    room: 'كل الغرفة',
+    noCall: 'بدون حكم',
+    split: '{a} أقل الواجب · {b} أميرة',
+  },
+
+  avatars: {
+    title: 'اختر صورتك الرمزية',
+    subtitle: 'وجوه مشهورة… تقريبًا. كل صورة يلبسها شخص واحد فقط.',
+    taken: 'يلبسها {name}',
+    yours: 'لك',
+    close: 'تم',
+    groups: { screen: 'نجوم الشاشة', stage: 'نجوم الغناء', heroes: 'أبطال الأفلام', anime: 'أنمي', lab: 'أساطير المختبر' },
+  },
+
   telepathy: {
     instruction: 'بدون كلام أو إشارات. اختر الخانة التي تظن أن شريكك سيختارها.',
     pickWell: 'اختر خانة',
@@ -493,6 +570,8 @@ const ar = {
     decisionStat: 'قرار: {a} من {b} توقعات',
     priorityStat: 'أولويات: تطابق {a} من {b} مراتب',
     ratherStat: 'هذا أو ذاك: {a} من {b} توقعات',
+    princessStat: 'معاملة أميرة: اتفاق في {a} من {b}',
+    bestieStat: 'نسخة الأصدقاء: اتفاق في {a} من {b}',
     supervised: 'بإشراف {name}',
     points: '{n} نقطة',
     noRounds: 'لم تكتمل أي جولة، لذا لا يوجد ما يُكتب في التقرير.',
@@ -528,6 +607,9 @@ const ar = {
     fill_both: 'اكتب إجابتك وتوقّعك.',
     pick_both: 'اختر خيارًا لنفسك وآخر لشريكك.',
     rank_all: 'رتّب العناصر الأربعة قبل التأكيد.',
+    call_all: 'احكم على كل العبارات قبل التأكيد.',
+    invalid_avatar: 'هذه الصورة غير متاحة.',
+    avatar_taken: 'شخص آخر يلبس هذه الصورة.',
     need_one_theme: 'اترك موضوعًا واحدًا على الأقل مختارًا.',
     nothing_to_verify: 'لا توجد نتائج للمراجعة الآن.',
     unknown_answer: 'هذه الإجابة لم تعد موجودة.',
@@ -575,6 +657,8 @@ export const TEST_TILES = {
   decision: { symbol: 'Dc', number: 3 },
   priority: { symbol: 'Pr', number: 4 },
   rather: { symbol: 'Wr', number: 5 },
+  princess: { symbol: 'Pt', number: 6 },
+  bestie: { symbol: 'Fr', number: 7 },
 };
 
 /** Compatibility % → bond classification. */

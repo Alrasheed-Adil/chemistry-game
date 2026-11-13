@@ -8,6 +8,7 @@
  *   decision_active  → DecisionActive
  *   priority_active  → PriorityActive
  *   rather_active    → RatherActive
+ *   treatment_active → TreatmentActive (couples or friends edition)
  *   revealing        → Sync / Telepathy / Decision / Priority reveal (by round type)
  *   game_over        → GameOver
  */
@@ -26,6 +27,7 @@ import { RatherActive, RatherReveal } from './screens/Rather.jsx';
 import SyncQuestion from './screens/SyncQuestion.jsx';
 import SyncReveal from './screens/SyncReveal.jsx';
 import { TelepathyActive, TelepathyReveal } from './screens/Telepathy.jsx';
+import { TreatmentActive, TreatmentReveal } from './screens/Treatment.jsx';
 
 function CurrentScreen() {
   const { view } = useGame();
@@ -54,6 +56,9 @@ function CurrentScreen() {
     case 'rather_active':
       screen = <RatherActive />;
       break;
+    case 'treatment_active':
+      screen = <TreatmentActive />;
+      break;
     case 'revealing':
       screen =
         {
@@ -62,6 +67,8 @@ function CurrentScreen() {
           decision: <DecisionReveal />,
           priority: <PriorityReveal />,
           rather: <RatherReveal />,
+          princess: <TreatmentReveal />,
+          bestie: <TreatmentReveal />,
         }[view.round?.type] ?? null;
       break;
     case 'game_over':

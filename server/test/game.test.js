@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DECISIONS, PRIORITIES, RATHERS, SYNC_PROMPTS, THEMES } from '../src/content.js';
+import { DECISIONS, PRIORITIES, RATHERS, SYNC_PROMPTS, THEMES, TREATMENT_ITEMS_PER_ROUND, TREATMENT_POOLS } from '../src/content.js';
+import { AVATARS, AVATAR_BY_ID } from '../../shared/avatars.js';
 import { judge } from '../src/matching.js';
 import { Room } from '../src/room.js';
 
@@ -181,5 +182,53 @@ test('themes: rounds only draw questions from the selected themes', () => {
   }
   assert.equal(room.state, 'game_over');
   assert.ok(team);
+  room.dispose();
+});
+
+test('princess treatment: each statement called the same way scores', () => {
+  const room = setupRoom(['princess', 'bestie']);
+  const [team] = room.fullTeams();
+  const [a, b] = team.members;
+  room.start('host-0001');
+  assert.equal(room.state, 'treatment_active');
+  assert.equal(room.round.type, 'princess');
+  const view = room.toView(a).round;
+  assert.equal(view.items.length, TREATMENT_ITEMS_PER_ROUND);
+  assert.ok(view.items.every((i) => i.en && i.ar));
+  assert.throws(() => room.submitTreatment(a, { calls: [1, 0] }), /call_all/);
+  assert.throws(() => room.submitTreatment(a, { calls: [1, 0, 2, 0, 1] }), /call_all/);
+  room.submitTreatment(a, { calls: [1, 0, 1, 0, 1] });
+  assert.equal(room.toView(b).round.submissions, undefined, 'calls stay hidden until the reveal');
+  room.submitTreatment(b, { calls: [1, 1, 1, 0, 0] });
+  assert.equal(room.state, 'revealing');
+  assert.deepEqual(room.roundResults()[team.id], { points: 3, max: 5, sameCalls: 3 });
+  room.next('host-0001');
+  // friends edition comes next, with a separate pool
+  assert.equal(room.round.type, 'bestie');
+  assert.equal(room.state, 'treatment_active');
+  assert.ok(room.round.items.every((i) => TREATMENT_POOLS.bestie.some((x) => x.en === i.en)));
+  room.dispose();
+});
+
+test('treatment pools are bilingual and never repeat within a round', () => {
+  for (const pool of Object.values(TREATMENT_POOLS)) {
+    assert.ok(pool.length >= 30);
+    for (const i of pool) assert.ok(i.en && i.ar, JSON.stringify(i));
+    assert.equal(new Set(pool.map((i) => i.en)).size, pool.length);
+  }
+});
+
+test('avatars: unique defaults, valid picks only, no duplicates', () => {
+  const room = setupRoom();
+  const ids = [...room.players.values()].map((p) => p.avatar);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.every((id) => AVATAR_BY_ID[id]));
+  assert.ok(AVATARS.length >= 60);
+  assert.equal(new Set(AVATARS.map((a) => a.id)).size, AVATARS.length);
+  const free = AVATARS.find((a) => !ids.includes(a.id)).id;
+  room.setAvatar('play-0001', free);
+  assert.equal(room.toView('host-0001').players.find((p) => p.id === 'play-0001').avatar, free);
+  assert.throws(() => room.setAvatar('play-0002', free), /avatar_taken/);
+  assert.throws(() => room.setAvatar('play-0002', 'nope'), /invalid_avatar/);
   room.dispose();
 });

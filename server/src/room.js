@@ -12,6 +12,8 @@
  *   decision_active   — Decision trial: pick A–D for a situation + predict partner
  *   priority_active   — Priorities trial: rank four items 1–4
  *   rather_active     — Would you rather: pick one of two hard options + predict partner
+ *   treatment_active  — Bare minimum or princess treatment (couples or friends edition):
+ *                       call each statement "bare minimum" or "princess treatment"
  *   revealing         — results of the current trial (any type); in Sync the
  *                       host can override matches here
  *   game_over         — final lab report
@@ -20,8 +22,8 @@
  * (see client/src/i18n.jsx → errors.*), so the server stays language-neutral.
  */
 
+import { AVATARS, AVATAR_BY_ID } from '../../shared/avatars.js';
 import {
-  AVATARS,
   ELEMENT_COUNT,
   THEMES,
   buildTelepathyGrid,
@@ -29,6 +31,7 @@ import {
   drawPriority,
   drawRather,
   drawSyncPrompt,
+  drawTreatment,
   shuffle,
 } from './content.js';
 import { judge } from './matching.js';
@@ -47,6 +50,7 @@ export const STATES = Object.freeze({
   DECISION_ACTIVE: 'decision_active',
   PRIORITY_ACTIVE: 'priority_active',
   RATHER_ACTIVE: 'rather_active',
+  TREATMENT_ACTIVE: 'treatment_active',
   REVEALING: 'revealing',
   GAME_OVER: 'game_over',
 });
@@ -57,6 +61,7 @@ const ACTIVE_STATES = new Set([
   STATES.DECISION_ACTIVE,
   STATES.PRIORITY_ACTIVE,
   STATES.RATHER_ACTIVE,
+  STATES.TREATMENT_ACTIVE,
 ]);
 const STATE_FOR_TYPE = {
   sync: STATES.QUESTION_ACTIVE,
@@ -64,12 +69,17 @@ const STATE_FOR_TYPE = {
   decision: STATES.DECISION_ACTIVE,
   priority: STATES.PRIORITY_ACTIVE,
   rather: STATES.RATHER_ACTIVE,
+  princess: STATES.TREATMENT_ACTIVE,
+  bestie: STATES.TREATMENT_ACTIVE,
 };
 
 /** Experiments where each player picks an option for themselves + predicts their partner. */
 const CHOICE_TYPES = new Set(['decision', 'rather']);
 
-export const TESTS = Object.freeze(['sync', 'telepathy', 'decision', 'priority', 'rather']);
+/** Bare minimum or princess treatment: couples (princess) and friends (bestie) editions. */
+const TREATMENT_TYPES = new Set(['princess', 'bestie']);
+
+export const TESTS = Object.freeze(['sync', 'telepathy', 'decision', 'priority', 'rather', 'princess', 'bestie']);
 
 export const POINTS = Object.freeze({
   prediction: 1, // Sync, Decision, Would you rather: each correct prediction of your partner
@@ -77,6 +87,7 @@ export const POINTS = Object.freeze({
   sameChoice: 1, // Decision, Would you rather: both partners chose the same option
   telepathy: 2, // Telepathy: both picked the same well
   sameRank: 1, // Priorities: each item both partners put at the same rank
+  sameCall: 1, // Princess treatment: each statement both partners called the same way
 });
 
 const SETTING_OPTIONS = {
@@ -86,6 +97,8 @@ const SETTING_OPTIONS = {
   decisionSeconds: [15, 20, 30, 45, 60],
   prioritySeconds: [30, 45, 60, 90],
   ratherSeconds: [15, 20, 30, 45],
+  princessSeconds: [30, 45, 60, 90],
+  bestieSeconds: [30, 45, 60, 90],
 };
 
 const LIMITS = { name: 16, teamName: 24, answer: 60, players: 24 };
@@ -123,12 +136,14 @@ export class Room {
       decisionSeconds: 30,
       prioritySeconds: 45,
       ratherSeconds: 20,
+      princessSeconds: 45,
+      bestieSeconds: 45,
     };
     this.plan = [];
     this.roundIndex = 0;
     this.round = null;
     this.history = [];
-    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set(), priority: new Set(), rather: new Set() };
+    this.used = { sync: new Set(), telepathy: new Set(), decision: new Set(), priority: new Set(), rather: new Set(), princess: new Set(), bestie: new Set() };
     this.teamCounter = 0;
     this.timer = null;
     this.hostTimer = null;
@@ -212,7 +227,7 @@ export class Room {
       if (!n) throw new GameError('name_required');
       if (this.players.size >= LIMITS.players) throw new GameError('room_full');
       const used = new Set([...this.players.values()].map((x) => x.avatar));
-      const avatar = shuffle(AVATARS).find((a) => !used.has(a)) ?? AVATARS[0];
+      const avatar = (shuffle(AVATARS).find((a) => !used.has(a.id)) ?? AVATARS[0]).id;
       p = { id: pid, name: n, avatar, teamId: null, connected: true, socketId, joinedAt: Date.now() };
       this.players.set(pid, p);
     }
@@ -262,6 +277,18 @@ export class Room {
       if (next) this.hostId = next.id;
     }
     this.checkRoundComplete();
+    this.emit();
+  }
+
+  /** Choose a profile avatar from the shared catalog. Two players can't wear the same one. */
+  setAvatar(pid, avatarId) {
+    const p = this.requirePlayer(pid);
+    if (!AVATAR_BY_ID[avatarId]) throw new GameError('invalid_avatar');
+    if (p.avatar === avatarId) return;
+    if ([...this.players.values()].some((x) => x.id !== pid && x.avatar === avatarId)) {
+      throw new GameError('avatar_taken');
+    }
+    p.avatar = avatarId;
     this.emit();
   }
 
@@ -415,6 +442,8 @@ export class Room {
       decision: this.settings.decisionSeconds,
       priority: this.settings.prioritySeconds,
       rather: this.settings.ratherSeconds,
+      princess: this.settings.princessSeconds,
+      bestie: this.settings.bestieSeconds,
     }[type];
     const round = {
       number: this.roundIndex + 1,
@@ -429,6 +458,8 @@ export class Room {
       Object.assign(round, { prompt: drawSyncPrompt(this.used.sync, themes), submissions: {}, verdicts: null, autoVerdicts: null });
     } else if (type === 'telepathy') {
       Object.assign(round, buildTelepathyGrid(this.used.telepathy, themes), { picks: {}, locked: {} });
+    } else if (TREATMENT_TYPES.has(type)) {
+      Object.assign(round, drawTreatment(type, this.used[type]), { submissions: {} });
     } else if (type === 'priority') {
       const priority = drawPriority(this.used.priority, themes);
       Object.assign(round, {
@@ -530,6 +561,20 @@ export class Room {
     if (!this.checkRoundComplete()) this.emit();
   }
 
+  /* Bare minimum or princess treatment ------------------------------------ */
+
+  /** `calls` has one entry per statement: 0 = bare minimum, 1 = princess treatment. */
+  submitTreatment(pid, { calls } = {}) {
+    if (!TREATMENT_TYPES.has(this.round?.type)) throw new GameError('answers_closed');
+    this.requireActive(this.round.type);
+    this.requireActivePlayer(pid);
+    const n = this.round.items.length;
+    const valid = Array.isArray(calls) && calls.length === n && calls.every((c) => c === 0 || c === 1);
+    if (!valid) throw new GameError('call_all');
+    this.round.submissions[pid] = { calls: [...calls] };
+    if (!this.checkRoundComplete()) this.emit();
+  }
+
   /* Telepathy ------------------------------------------------------------- */
 
   pickTile(pid, index) {
@@ -609,6 +654,15 @@ export class Room {
           max: 2 * POINTS.prediction + POINTS.sameChoice,
           predictionsCorrect,
           same,
+        };
+      } else if (TREATMENT_TYPES.has(r.type)) {
+        const ca = r.submissions[a]?.calls;
+        const cb = r.submissions[b]?.calls;
+        const sameCalls = ca && cb ? ca.filter((c, i) => cb[i] === c).length : 0;
+        results[teamId] = {
+          points: sameCalls * POINTS.sameCall,
+          max: r.items.length * POINTS.sameCall,
+          sameCalls,
         };
       } else if (r.type === 'priority') {
         const oa = r.submissions[a]?.order;
@@ -703,7 +757,7 @@ export class Room {
         }
       } else {
         if (CHOICE_TYPES.has(r.type)) round.choices = r.choices;
-        if (r.type === 'priority') round.items = r.items;
+        if (r.type === 'priority' || TREATMENT_TYPES.has(r.type)) round.items = r.items;
         if (active) {
           round.submitted = Object.fromEntries(Object.keys(r.submissions).map((pid) => [pid, true]));
           round.mine = r.submissions[forPid] ?? null;

@@ -3,120 +3,165 @@
  */
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
+import { AVATAR_BY_ID } from '../../../shared/avatars.js';
+import AvatarPicker from '../components/AvatarPicker.jsx';
 import { Avatar, Button, ElementTile, Screen, TestTile, cx, useBusy } from '../components/ui.jsx';
 import { useGame } from '../game.jsx';
 import { elementOf, pairName, useLang } from '../i18n.jsx';
+
+/** Opens the avatar picker from anywhere in the lobby (your own avatar is clickable). */
+const PickAvatar = createContext(() => {});
 
 export default function Lobby() {
   const { view, isHost, me, myTeam, actions, playersById } = useGame();
   const { t } = useLang();
   const [busy, run] = useBusy();
+  const [picking, setPicking] = useState(false);
   const unpaired = view.players.filter((p) => !p.teamId);
   const fullTeams = view.teams.filter((tm) => tm.members.length === 2);
 
   return (
-    <Screen className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      {/* ------------------------------ Pairs ------------------------------ */}
-      <section className="space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[34px] leading-tight font-semibold tracking-[-0.025em]">{t('lobby.title')}</h1>
-            <p className="mt-1 max-w-[36rem] text-ink-soft">{t('lobby.subtitle', { code: view.code })}</p>
-          </div>
-          {!myTeam ? (
-            <Button busy={busy} onClick={() => run(actions.createTeam)}>
-              {t('lobby.newPair')}
-            </Button>
-          ) : (
-            <Button variant="secondary" disabled={busy} onClick={() => run(actions.leaveTeam)}>
-              {t('lobby.leavePair')}
-            </Button>
-          )}
-        </div>
-
-        <motion.div layout className="grid gap-3 sm:grid-cols-2">
-          <AnimatePresence>
-            {view.teams.map((team) => (
-              <PairCard key={team.id} team={team} />
-            ))}
-          </AnimatePresence>
-          {!view.teams.length ? (
-            <div className="rounded-[var(--radius-surface)] border-2 border-dashed border-line p-8 text-center text-graphite sm:col-span-2">
-              {t('lobby.empty')}
+    <PickAvatar.Provider value={() => setPicking(true)}>
+      <Screen className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        {/* ------------------------------ Pairs ------------------------------ */}
+        <section className="space-y-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-[34px] leading-tight font-semibold tracking-[-0.025em]">{t('lobby.title')}</h1>
+              <p className="mt-1 max-w-[36rem] text-ink-soft">{t('lobby.subtitle', { code: view.code })}</p>
+              <MyAvatar />
             </div>
-          ) : null}
-        </motion.div>
-
-        {/* Players not yet in a pair */}
-        <div className="bench p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-ink-soft">
-              {t('lobby.unpaired')} <span className="tabular text-graphite">({unpaired.length})</span>
-            </h3>
-            {isHost && unpaired.some((p) => p.id !== view.hostId) ? (
-              <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(actions.host.autoPair)}>
-                {t('lobby.autoPair')}
+            {!myTeam ? (
+              <Button busy={busy} onClick={() => run(actions.createTeam)}>
+                {t('lobby.newPair')}
               </Button>
-            ) : null}
+            ) : (
+              <Button variant="secondary" disabled={busy} onClick={() => run(actions.leaveTeam)}>
+                {t('lobby.leavePair')}
+              </Button>
+            )}
           </div>
-          {unpaired.length ? (
-            <ul className="flex flex-wrap gap-2">
-              <AnimatePresence>
-                {unpaired.map((p) => (
-                  <motion.li
-                    layout
-                    key={p.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="flex items-center gap-2 rounded-full border border-line bg-glass py-1 ps-1 pe-2"
-                  >
-                    <Avatar player={p} size="sm" />
-                    <span className="text-sm font-medium">
-                      {p.name}
-                      {p.id === view.you ? <span className="text-graphite"> ({t('lobby.you')})</span> : null}
-                    </span>
-                    {p.id === view.hostId ? <HostMark /> : null}
-                    {isHost ? <HostPlayerMenu player={p} /> : null}
-                  </motion.li>
-                ))}
-              </AnimatePresence>
-            </ul>
-          ) : (
-            <p className="text-sm text-graphite">{t('lobby.allPaired')}</p>
-          )}
-          {isHost && !me?.teamId ? <p className="mt-3 max-w-[40rem] text-sm text-graphite">{t('lobby.hostTip')}</p> : null}
-        </div>
-      </section>
 
-      {/* ---------------------------- Protocol ----------------------------- */}
-      <aside className="space-y-4">
-        <Protocol />
-        {isHost ? (
-          <div>
-            <Button size="lg" className="w-full" busy={busy} disabled={!fullTeams.length} onClick={() => run(actions.host.start)}>
-              {t('lobby.start')}
-            </Button>
-            <p className="mt-2 text-center text-sm text-graphite">
-              {fullTeams.length
-                ? `${t('lobby.readyCount', { n: fullTeams.length })}${
-                    view.teams.length > fullTeams.length ? `. ${t('lobby.incomplete')}` : ''
-                  }`
-                : t('lobby.needPair')}
-            </p>
+          <motion.div layout className="grid gap-3 sm:grid-cols-2">
+            <AnimatePresence>
+              {view.teams.map((team) => (
+                <PairCard key={team.id} team={team} />
+              ))}
+            </AnimatePresence>
+            {!view.teams.length ? (
+              <div className="rounded-[var(--radius-surface)] border-2 border-dashed border-line p-8 text-center text-graphite sm:col-span-2">
+                {t('lobby.empty')}
+              </div>
+            ) : null}
+          </motion.div>
+
+          {/* Players not yet in a pair */}
+          <div className="bench p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium text-ink-soft">
+                {t('lobby.unpaired')} <span className="tabular text-graphite">({unpaired.length})</span>
+              </h3>
+              {isHost && unpaired.some((p) => p.id !== view.hostId) ? (
+                <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(actions.host.autoPair)}>
+                  {t('lobby.autoPair')}
+                </Button>
+              ) : null}
+            </div>
+            {unpaired.length ? (
+              <ul className="flex flex-wrap gap-2">
+                <AnimatePresence>
+                  {unpaired.map((p) => (
+                    <motion.li
+                      layout
+                      key={p.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="flex items-center gap-2 rounded-full border border-line bg-glass py-1 ps-1 pe-2"
+                    >
+                      <OwnAvatar player={p} size="sm" />
+                      <span className="text-sm font-medium">
+                        {p.name}
+                        {p.id === view.you ? <span className="text-graphite"> ({t('lobby.you')})</span> : null}
+                      </span>
+                      {p.id === view.hostId ? <HostMark /> : null}
+                      {isHost ? <HostPlayerMenu player={p} /> : null}
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ul>
+            ) : (
+              <p className="text-sm text-graphite">{t('lobby.allPaired')}</p>
+            )}
+            {isHost && !me?.teamId ? <p className="mt-3 max-w-[40rem] text-sm text-graphite">{t('lobby.hostTip')}</p> : null}
           </div>
-        ) : (
-          <div className="bench flex items-center gap-3 px-4 py-3.5">
-            <span className="relative flex size-2.5 shrink-0">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-cobalt opacity-50" />
-              <span className="relative inline-flex size-2.5 rounded-full bg-cobalt" />
-            </span>
-            <p className="text-sm text-ink-soft">{t('lobby.waitingHost', { name: playersById[view.hostId]?.name ?? '…' })}</p>
-          </div>
-        )}
-      </aside>
-    </Screen>
+        </section>
+
+        {/* ---------------------------- Protocol ----------------------------- */}
+        <aside className="space-y-4">
+          <Protocol />
+          {isHost ? (
+            <div>
+              <Button size="lg" className="w-full" busy={busy} disabled={!fullTeams.length} onClick={() => run(actions.host.start)}>
+                {t('lobby.start')}
+              </Button>
+              <p className="mt-2 text-center text-sm text-graphite">
+                {fullTeams.length
+                  ? `${t('lobby.readyCount', { n: fullTeams.length })}${
+                      view.teams.length > fullTeams.length ? `. ${t('lobby.incomplete')}` : ''
+                    }`
+                  : t('lobby.needPair')}
+              </p>
+            </div>
+          ) : (
+            <div className="bench flex items-center gap-3 px-4 py-3.5">
+              <span className="relative flex size-2.5 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-cobalt opacity-50" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-cobalt" />
+              </span>
+              <p className="text-sm text-ink-soft">{t('lobby.waitingHost', { name: playersById[view.hostId]?.name ?? '…' })}</p>
+            </div>
+          )}
+        </aside>
+      </Screen>
+      <AvatarPicker open={picking} onClose={() => setPicking(false)} />
+    </PickAvatar.Provider>
+  );
+}
+
+/** "Your avatar" button under the lobby title. */
+function MyAvatar() {
+  const { me } = useGame();
+  const { t, L } = useLang();
+  const open = useContext(PickAvatar);
+  if (!me) return null;
+  const look = AVATAR_BY_ID[me.avatar];
+  return (
+    <button
+      onClick={open}
+      className="group mt-4 flex items-center gap-3 rounded-full border border-line bg-bench py-1.5 ps-1.5 pe-4 text-start transition hover:border-ink/50"
+    >
+      <Avatar player={me} size="md" />
+      <span className="leading-tight">
+        <span className="block text-xs text-graphite">{t('lobby.avatar')}</span>
+        <span className="block font-semibold">{look ? L(look) : me.name}</span>
+      </span>
+      <span className="ms-2 text-sm font-medium text-cobalt group-hover:underline">{t('lobby.changeAvatar')}</span>
+    </button>
+  );
+}
+
+/** Any player's avatar; your own opens the picker. */
+function OwnAvatar({ player, ...props }) {
+  const { view } = useGame();
+  const { t } = useLang();
+  const open = useContext(PickAvatar);
+  if (player?.id !== view.you) return <Avatar player={player} {...props} />;
+  return (
+    <button onClick={open} aria-label={t('lobby.changeAvatar')} className="rounded-full transition hover:scale-105">
+      <Avatar player={player} {...props} />
+    </button>
   );
 }
 
@@ -189,7 +234,7 @@ function PairCard({ team }) {
         {seats.map((pid, i) =>
           pid ? (
             <div key={pid} className="flex flex-col items-center gap-1 rounded-[var(--radius-control)] bg-glass px-2 py-3">
-              <Avatar player={playersById[pid]} size="md" ring={el.color} />
+              <OwnAvatar player={playersById[pid]} size="md" ring={el.color} />
               <span className="max-w-full truncate text-sm font-medium">{playersById[pid]?.name}</span>
               <span className="flex h-5 items-center gap-1.5 text-xs text-graphite">
                 {pid === view.you ? t('lobby.you') : null}
@@ -259,7 +304,7 @@ function HostPlayerMenu({ player }) {
 
 /* ------------------------------ Protocol ------------------------------- */
 
-const TEST_KEYS = ['sync', 'telepathy', 'decision', 'priority', 'rather'];
+const TEST_KEYS = ['sync', 'telepathy', 'decision', 'priority', 'rather', 'princess', 'bestie'];
 const THEME_KEYS = ['light', 'deep', 'bonds'];
 const TIMER_FIELDS = {
   sync: { key: 'questionSeconds', values: [45, 60, 90, 120] },
@@ -267,6 +312,8 @@ const TIMER_FIELDS = {
   decision: { key: 'decisionSeconds', values: [20, 30, 45, 60] },
   priority: { key: 'prioritySeconds', values: [30, 45, 60, 90] },
   rather: { key: 'ratherSeconds', values: [15, 20, 30, 45] },
+  princess: { key: 'princessSeconds', values: [30, 45, 60, 90] },
+  bestie: { key: 'bestieSeconds', values: [30, 45, 60, 90] },
 };
 
 function Protocol() {
@@ -362,7 +409,9 @@ function Protocol() {
         <div className="space-y-2">
           {TEST_KEYS.filter((k) => s.tests.includes(k)).map((k) => (
             <div key={k} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 truncate text-sm text-ink-soft">{t(`tests.${k}.name`)}</span>
+              <span className="w-24 shrink-0 truncate text-sm text-ink-soft" title={t(`tests.${k}.name`)}>
+                {t(`tests.${k}.${k === 'princess' || k === 'bestie' ? 'short' : 'name'}`)}
+              </span>
               <SegmentRow
                 values={TIMER_FIELDS[k].values}
                 value={s[TIMER_FIELDS[k].key]}

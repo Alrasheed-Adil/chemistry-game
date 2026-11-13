@@ -11,7 +11,7 @@ import { useGame } from '../game.jsx';
 import { useLang } from '../i18n.jsx';
 
 const inviteCode = new URLSearchParams(window.location.search).get('room')?.toUpperCase().slice(0, 4) ?? '';
-const TESTS = ['sync', 'telepathy', 'decision', 'priority', 'rather'];
+const TESTS = ['sync', 'telepathy', 'decision', 'priority', 'rather', 'princess', 'bestie'];
 
 export default function Landing() {
   const { actions, notify } = useGame();

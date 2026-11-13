@@ -890,8 +890,123 @@ export function buildTelepathyGrid(used, themes) {
 /** Pairs are identified by an element (rendered client-side with name, symbol, flame color). */
 export const ELEMENT_COUNT = 12;
 
-export const AVATARS = [
-  '🦊', '🐼', '🐙', '🦄', '🐢', '🦁', '🐧', '🦥', '🐝', '🦩', '🐳', '🦔',
-  '🐸', '🦉', '🐨', '🐪', '🐯', '🐰', '🦋', '🐶', '🐱', '🐻', '🦦', '🐲',
+/* ------------------------------------------------------------------ */
+/* Bare minimum or princess treatment                                  */
+/* Each round shows a handful of things someone might do for you; each */
+/* player calls every one "bare minimum" (0) or "princess treatment"   */
+/* (1).   princess — couples edition      bestie — friends edition     */
+/* Phrased as actions (no he/she) so they read the same for everyone.  */
+/* ------------------------------------------------------------------ */
+
+const I = (en, ar) => ({ en, ar });
+
+const PRINCESS_ITEMS = [
+  I('Texting “good morning” every day', 'رسالة «صباح الخير» كل يوم'),
+  I('Remembering your exact coffee order', 'حفظ طلب قهوتك بالتفصيل'),
+  I('Opening the car door for you', 'فتح باب السيارة لك'),
+  I('Planning the whole date without being asked', 'التخطيط للموعد كاملًا بدون ما تطلب'),
+  I('Sharing their location when out late', 'مشاركة الموقع عند التأخر برا البيت'),
+  I('Paying on the first date', 'الدفع في أول موعد'),
+  I('Bringing you food when you’re sick', 'جلب الأكل لك وقت المرض'),
+  I('Replying within an hour', 'الرد خلال ساعة'),
+  I('Posting you on social media', 'نشر صورتكما على السوشال ميديا'),
+  I('Remembering your friends’ names', 'تذكّر أسماء أصدقائك'),
+  I('“Text me when you get home”', '«طمّني إذا وصلت»'),
+  I('Carrying the shopping bags', 'حمل أكياس التسوّق'),
+  I('Surprise flowers for no reason', 'ورد مفاجئ بدون مناسبة'),
+  I('Defending you when you’re not around', 'الدفاع عنك في غيابك'),
+  I('Learning your love language', 'تعلّم لغة الحب الخاصة بك'),
+  I('Letting you pick the restaurant', 'ترك اختيار المطعم لك'),
+  I('Saving you the last bite', 'ترك آخر لقمة لك'),
+  I('Calling instead of texting when it matters', 'الاتصال بدل الرسائل في الأمور المهمة'),
+  I('Getting along with your family', 'الانسجام مع أهلك'),
+  I('Remembering your anniversary with no reminder', 'تذكّر ذكراكما بدون تنبيه'),
+  I('Apologizing first after a fight', 'الاعتذار أولًا بعد الزعل'),
+  I('Driving you to the airport at 4 a.m.', 'توصيلك للمطار الساعة 4 الفجر'),
+  I('Listening to your rant without trying to fix it', 'سماع فضفضتك بدون محاولة حلّها'),
+  I('Handwritten letters', 'رسائل بخط اليد'),
+  I('Knowing your shoe size', 'معرفة مقاس حذائك'),
+  I('Planning a trip around your interests', 'تخطيط رحلة على كيف اهتماماتك'),
+  I('Asking about your day, and actually listening', 'السؤال عن يومك والإنصات فعلًا'),
+  I('Saying “I love you” first', 'قول «أحبك» أولًا'),
+  I('Giving you the phone charger first', 'إعطاؤك الشاحن أولًا'),
+  I('Introducing you to their friends', 'تعريفك على أصدقائهم'),
+  I('Cooking dinner after your long day', 'طبخ العشاء بعد يومك الطويل'),
+  I('No phone at the dinner table', 'لا جوال على طاولة العشاء'),
+  I('Holding your bag while you try things on', 'مسك شنطتك وأنت تجرّب الملابس'),
+  I('Matching outfits on purpose', 'تنسيق اللبس معك عن قصد'),
+  I('Booking the table before you ask', 'حجز الطاولة قبل ما تطلب'),
+  I('Remembering a tiny thing you said months ago', 'تذكّر شيء صغير قلته قبل شهور'),
+  I('Waking up early to make you breakfast', 'الصحيان بدري لتحضير فطورك'),
+  I('Being on time', 'الالتزام بالموعد'),
+  I('Cooling the car down before you get in', 'تشغيل السيارة وتبريدها قبل ما تركب'),
+  I('Walking on the traffic side of the pavement', 'المشي من جهة الشارع لحمايتك'),
 ];
 
+const BESTIE_ITEMS = [
+  I('Hyping your selfie in the comments', 'مدح صورتك في التعليقات'),
+  I('Remembering your birthday with no reminder', 'تذكّر عيد ميلادك بدون تنبيه'),
+  I('Sending memes that remind them of you', 'إرسال ميمز تذكّرهم فيك'),
+  I('Holding your stuff while you’re on a ride', 'مسك أغراضك وأنت في اللعبة'),
+  I('Driving you home even when it’s out of the way', 'توصيلك للبيت حتى لو مو على طريقهم'),
+  I('Telling you there’s food in your teeth', 'تنبيهك إن فيه أكل بين أسنانك'),
+  I('Lending you their charger', 'إعطاؤك شاحنهم'),
+  I('Answering your voice note with a voice note', 'الرد على فويسك بفويس'),
+  I('Showing up to help you move house', 'الحضور لمساعدتك في نقل العفش'),
+  I('Keeping your secret', 'حفظ سرّك'),
+  I('Paying you back without a reminder', 'رد الفلوس بدون تذكير'),
+  I('Taking 50 photos until you like one', 'تصويرك 50 صورة لين تعجبك وحدة'),
+  I('Remembering your coffee order', 'حفظ طلب قهوتك'),
+  I('Picking up your call at 2 a.m.', 'الرد على اتصالك الساعة 2 الفجر'),
+  I('Backing you up in an argument, even when you’re wrong', 'الوقوف معك في النقاش حتى لو كنت غلطان'),
+  I('Texting “home safe?” after hanging out', 'سؤال «وصلت؟» بعد الطلعة'),
+  I('Inviting you to everything', 'عزيمتك على كل طلعة'),
+  I('Actually watching the show you recommended', 'مشاهدة المسلسل اللي رشّحته فعلًا'),
+  I('Visiting you in hospital', 'زيارتك في المستشفى'),
+  I('Ordering your usual when you’re running late', 'طلب طلبك المعتاد إذا تأخرت'),
+  I('Bringing snacks to the sleepover', 'جلب السناكات للسهرة'),
+  I('Holding a grudge against whoever hurt you', 'الزعل على اللي زعّلك نيابة عنك'),
+  I('Being honest about your outfit', 'الصراحة في رأيهم بلبسك'),
+  I('Saving you a seat', 'حجز مكان لك'),
+  I('Throwing you a surprise birthday party', 'حفلة عيد ميلاد مفاجئة'),
+  I('Remembering your exam or interview day', 'تذكّر يوم اختبارك أو مقابلتك'),
+  I('Sharing their fries', 'مشاركتك البطاطس'),
+  I('Liking your posts within minutes', 'الإعجاب بمنشوراتك خلال دقائق'),
+  I('Coming to your graduation', 'حضور تخرّجك'),
+  I('Checking on you when you go quiet', 'السؤال عنك إذا اختفيت'),
+  I('Helping you rehearse a hard conversation', 'مساعدتك تتدرّب على محادثة صعبة'),
+  I('Planning the group trip', 'تنظيم رحلة الشلّة'),
+  I('Making you a playlist', 'عمل قائمة أغاني لك'),
+  I('Knowing exactly how you take your tea', 'معرفة شايك بالضبط كيف تحبه'),
+  I('Defending you in the group chat', 'الدفاع عنك في القروب'),
+  I('Bringing you soup when you’re sick', 'جلب شوربة لك وقت المرض'),
+  I('Lending you their clothes', 'إعارتك ملابسهم'),
+  I('Remembering your food allergies', 'تذكّر حساسيتك من الأكل'),
+  I('Waiting until you’re inside before driving off', 'الانتظار لين تدخل البيت قبل ما يمشون'),
+  I('Sending a “thinking of you” text out of nowhere', 'رسالة «تذكرتك» فجأة بدون سبب'),
+];
+
+export const TREATMENT_POOLS = Object.freeze({ princess: PRINCESS_ITEMS, bestie: BESTIE_ITEMS });
+
+const TREATMENT_TEXT = {
+  princess: { en: 'Bare minimum or princess treatment?', ar: 'أقل الواجب ولا معاملة أميرة؟' },
+  bestie: { en: 'Bare minimum or princess treatment? Friends edition', ar: 'أقل الواجب ولا معاملة أميرة؟ نسخة الأصدقاء' },
+};
+
+export const TREATMENT_ITEMS_PER_ROUND = 5;
+
+/** Draw a round of statements for `edition` ('princess' | 'bestie') without repeating recent ones. */
+export function drawTreatment(edition, used, count = TREATMENT_ITEMS_PER_ROUND) {
+  const items = TREATMENT_POOLS[edition];
+  let available = items.map((_, i) => i).filter((i) => !used.has(i));
+  if (available.length < count) {
+    used.clear();
+    available = items.map((_, i) => i);
+  }
+  const chosen = shuffle(available).slice(0, count);
+  for (const i of chosen) used.add(i);
+  return {
+    prompt: { category: edition, text: structuredClone(TREATMENT_TEXT[edition]) },
+    items: chosen.map((i) => structuredClone(items[i])),
+  };
+}

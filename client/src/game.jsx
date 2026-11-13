@@ -141,6 +141,8 @@ export function GameProvider({ children }) {
       submitSync: (answer, prediction) => call('sync:submit', { answer, prediction }),
       submitDecision: (choice, prediction) => call('decision:submit', { choice, prediction }),
       submitPriority: (order) => call('priority:submit', { order }),
+      submitTreatment: (calls) => call('treatment:submit', { calls }),
+      setAvatar: (avatar) => call('player:avatar', { avatar }),
       pickTile: (index) => call('telepathy:pick', { index }),
       lockTile: () => call('telepathy:lock'),
       host: {
